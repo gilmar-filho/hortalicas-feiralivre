@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Build (estrutura do repositório)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verifica arquivos obrigatórios do Desafio 1
+        run: |
+          set -e
+          for f in README.md LICENSE docs/equipe.md docs/visao-produto.md docs/adr/0000-registro-de-decisoes.md; do
+            if [ ! -f "$f" ]; then
+              echo "Faltando: $f"
+              exit 1
+            fi
+          done
+          echo "Todos os arquivos obrigatórios estão presentes."
+
+  lint:
+    name: Lint (Markdown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: markdownlint
+        run: |
+          files=$(git ls-files -- '*.md')
+          if [ -n "$files" ]; then
+            npx --yes markdownlint-cli2 $files
+          fi
