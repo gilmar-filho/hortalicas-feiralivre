@@ -35,7 +35,7 @@ git clone https://github.com/gilmar-filho/hortalicas-feiralivre.git
 cd hortalicas-feiralivre
 ```
 
-2. Verifique os workflows de CI:
+1. Verifique os workflows de CI:
 
 Qualquer Pull Request aberto passará automaticamente pelas verificações de segurança de `Build` (arquivos obrigatórios) e `Lint` (formatação markdown) configuradas no arquivo `.github/workflows/ci.yml`.
 
