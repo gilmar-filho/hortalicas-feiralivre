@@ -1,4 +1,4 @@
-# 0001. Adotar monólito modular para a feira livre
+# 0001. Adotar monolito modular para a feira livre
 
 ## Status
 Aceito
@@ -8,7 +8,7 @@ O sistema Feira Livre precisa apoiar a comercialização de hortaliças com
 rastreabilidade de produtos, controle de estoque por lote, pedidos de
 compradores, faturamento e retirada. A entrega acadêmica exige a aplicação
 de Event Storming, a identificação de contextos delimitados, a construção
-de um monólito modular com pelo menos três contextos e a demonstração de um
+de um monolito modular com pelo menos três contextos e a demonstração de um
 fluxo ponta a ponta.
 
 A aplicação também precisa permitir que compradores consultem o catálogo,
@@ -30,7 +30,7 @@ Esses eventos evidenciam quatro áreas de responsabilidade:
 - **Faturamento**: faturas, valores e estado da cobrança.
 
 ## Decisão
-A aplicação será implementada como um **monólito modular** em Java/Spring
+A aplicação será implementada como um **monolito modular** em Java/Spring
 Boot, com o React como frontend web separado por responsabilidade de
 apresentação. Cada contexto terá seus próprios pacotes, controladores e
 regras de negócio dentro do mesmo backend e compartilhará o banco SQLite da
@@ -46,7 +46,7 @@ Os módulos backend ficam organizados por contexto em:
 O módulo de usuário apoia autenticação e identificação do comprador ou
 vendedor. O frontend em `frontend/src/` oferece as telas de login, cadastro,
 compra, venda, acompanhamento de pedidos e leitura de faturas, consumindo a
-API REST do monólito.
+API REST do monolito.
 
 Na visão C4, a solução fica representada assim:
 
@@ -92,7 +92,7 @@ microserviços.
 
 ## Consequências
 A decisão atende à entrega D2 com quatro contextos delimitados, um fluxo
-ponta a ponta demonstrável e uma estrutura de monólito modular que pode ser
+ponta a ponta demonstrável e uma estrutura de monolito modular que pode ser
 executada localmente com Java, Maven, Node.js e SQLite.
 
 O mesmo banco e processo simplificam a execução, os testes e a consistência
