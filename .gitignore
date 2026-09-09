@@ -1,0 +1,31 @@
+# Java / Maven
+backend/target/
+*.class
+
+# Banco SQLite local e arquivos auxiliares
+backend/data/*.db
+backend/data/*.db-*
+*.sqlite
+*.sqlite3
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+
+# IDEs e sistema operacional
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs e arquivos temporários
+*.log
+*.tmp
+*.temp
