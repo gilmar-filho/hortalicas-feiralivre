@@ -1,9 +1,7 @@
 import {
   ArrowRight,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Clock3,
   LogOut,
   MapPin,
   PackageCheck,
@@ -20,6 +18,28 @@ import "./styles.css";
 const API = "http://localhost:8080/api";
 const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const dataBR = (data) => new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
+const diaDaSemana = (data) => DIAS[new Date(`${data}T00:00:00`).getDay()];
+const faixa = (retirada) => `${retirada.horaInicio}–${retirada.horaFim}`;
+const hojeLocal = () => {
+  const agora = new Date();
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+};
+
+async function comRetirada(registros, chavePedido) {
+  const ids = [...new Set(registros.map((registro) => registro[chavePedido]))];
+  if (ids.length === 0) return registros;
+  const reservas = await (
+    await fetch(`${API}/retiradas/reservas?pedidoIds=${ids.join(",")}`)
+  ).json();
+  const porPedido = new Map(reservas.map((reserva) => [reserva.pedidoId, reserva]));
+  return registros.map((registro) => ({
+    ...registro,
+    retirada: porPedido.get(registro[chavePedido]) || null,
+  }));
+}
 
 function App() {
   const [path, setPath] = useState(window.location.pathname);
@@ -68,12 +88,16 @@ function App() {
   };
   const loadOrders = async () => {
     if (!currentUser) return;
-    setOrders(await (await fetch(`${API}/pedidos?compradorId=${currentUser.id}`)).json());
+    const pedidos = await (await fetch(`${API}/pedidos?compradorId=${currentUser.id}`)).json();
+    setOrders(await comRetirada(pedidos, "id"));
   };
-  const loadInvoices = async () =>
-    currentUser && setInvoices(
-      await (await fetch(`${API}/faturamento?visao=vendedor&usuarioId=${currentUser.id}`)).json(),
-    );
+  const loadInvoices = async () => {
+    if (!currentUser) return;
+    const faturas = await (
+      await fetch(`${API}/faturamento?visao=vendedor&usuarioId=${currentUser.id}`)
+    ).json();
+    setInvoices(await comRetirada(faturas, "pedido_id"));
+  };
   useEffect(() => {
     if (currentUser) loadProducts();
     loadOrders();
@@ -103,13 +127,15 @@ function App() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(
-          body.detail || body.message || "Não foi possível reservar o estoque.",
+          body.detail || body.message || "Não foi possível criar o pedido.",
         );
       setSelected(null);
       await Promise.all([loadProducts(query), loadOrders(), loadInvoices()]);
       notify("Pedido criado com status PENDENTE.");
+      return null;
     } catch (error) {
       notify(error.message);
+      return error.message;
     } finally {
       setLoading(false);
     }
@@ -207,6 +233,7 @@ function App() {
       {selected && (
         <Checkout
           product={selected}
+          compradorId={currentUser.id}
           onClose={() => setSelected(null)}
           onSubmit={finishOrder}
           loading={loading}
@@ -496,13 +523,13 @@ function BuyView({ products, query, setQuery, onSelect, orders }) {
                   #{String(order.id).padStart(4, "0")}
                 </div>
                 <div>
-                  <strong>Retirada em {order.data_retirada}</strong>
-                  <small>
-                    {order.produtos || "Compra registrada"}
-                  </small>
-                  <small>
-                    {order.local_nome} · {order.hora_retirada} · Comprador: {order.comprador_nome}
-                  </small>
+                  <strong>
+                    Retirada em{" "}
+                    {order.retirada ? dataBR(order.retirada.data) : "-"}
+                  </strong>
+                  <small>{order.produtos || "Compra registrada"}</small>
+                  <RetiradaInfo retirada={order.retirada} />
+                  <small>Comprador: {order.comprador_nome}</small>
                   <small>
                     Fatura #{order.fatura_id || "-"} ·{" "}
                     {order.fatura_status || "não gerada"}
@@ -526,6 +553,18 @@ function BuyView({ products, query, setQuery, onSelect, orders }) {
         />
       </section>
     </main>
+  );
+}
+
+function RetiradaInfo({ retirada }) {
+  if (!retirada) return <small>Retirada não informada</small>;
+  const liberada = retirada.status === "LIBERADA";
+  return (
+    <small className={liberada ? "retirada-liberada" : undefined}>
+      Retirada: {retirada.localNome} · {diaDaSemana(retirada.data)}{" "}
+      {dataBR(retirada.data)} · {faixa(retirada)}
+      {liberada && " · vaga liberada"}
+    </small>
   );
 }
 
@@ -598,10 +637,52 @@ function ProductCard({ product, onClick }) {
   );
 }
 
-function Checkout({ product, onClose, onSubmit, loading }) {
+function Checkout({ product, compradorId, onClose, onSubmit, loading }) {
   const [quantity, setQuantity] = useState(1);
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("09:00");
+  const [ocorrencias, setOcorrencias] = useState(null);
+  const [escolhida, setEscolhida] = useState(null);
+  const [erro, setErro] = useState("");
+  const chave = (ocorrencia) => `${ocorrencia.horarioId}|${ocorrencia.data}`;
+  const semEstoque = (ocorrencia) =>
+    !product.validade_maxima || ocorrencia.data > product.validade_maxima;
+  const disponivel = (ocorrencia) =>
+    !semEstoque(ocorrencia) &&
+    (ocorrencia.vagas > 0 || ocorrencia.compradorJaReservado);
+  const situacao = (ocorrencia) => {
+    if (semEstoque(ocorrencia)) return "Sem estoque para esta data";
+    if (ocorrencia.compradorJaReservado) return "Você já tem retirada nesta janela";
+    if (ocorrencia.vagas === 0) return "Esgotada";
+    return `${ocorrencia.vagas} de ${ocorrencia.capacidade} vagas`;
+  };
+  const carregar = async () => {
+    const lista = await (
+      await fetch(
+        `${API}/retiradas/ocorrencias?vendedorId=${product.usuario_id}&compradorId=${compradorId}`,
+      )
+    ).json();
+    setOcorrencias(lista);
+    setEscolhida((atual) =>
+      atual && lista.some((o) => chave(o) === chave(atual) && disponivel(o))
+        ? atual
+        : null,
+    );
+  };
+  useEffect(() => {
+    carregar();
+  }, [product.id]);
+  const confirmar = async () => {
+    setErro("");
+    const falha = await onSubmit({
+      produtoId: product.id,
+      quantidade: quantity,
+      horarioRetiradaId: escolhida.horarioId,
+      dataRetirada: escolhida.data,
+    });
+    if (falha) {
+      setErro(falha);
+      await carregar();
+    }
+  };
   return (
     <div className="modal-backdrop">
       <div className="checkout">
@@ -631,44 +712,45 @@ function Checkout({ product, onClose, onSubmit, loading }) {
             }
           />
         </label>
-        <div className="two-fields">
-          <label>
-            <CalendarDays size={16} /> Data de retirada
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            <Clock3 size={16} /> Horário
-            <select value={time} onChange={(e) => setTime(e.target.value)}>
-              <option>09:00</option>
-              <option>10:00</option>
-              <option>11:00</option>
-            </select>
-          </label>
+        <div className="ocorrencias">
+          <p className="ocorrencias-titulo">
+            <MapPin size={16} /> Escolha a retirada
+          </p>
+          {ocorrencias === null ? (
+            <p className="empty">Carregando janelas de retirada...</p>
+          ) : ocorrencias.length === 0 ? (
+            <p className="empty">Nenhuma janela de retirada disponível.</p>
+          ) : (
+            ocorrencias.map((ocorrencia) => (
+              <label
+                key={chave(ocorrencia)}
+                className={`ocorrencia${disponivel(ocorrencia) ? "" : " indisponivel"}`}
+              >
+                <input
+                  type="radio"
+                  name="ocorrencia"
+                  disabled={!disponivel(ocorrencia)}
+                  checked={escolhida !== null && chave(escolhida) === chave(ocorrencia)}
+                  onChange={() => setEscolhida(ocorrencia)}
+                />
+                <span>
+                  <strong>
+                    {ocorrencia.localNome} · {DIAS[ocorrencia.diaSemana]}{" "}
+                    {dataBR(ocorrencia.data)} · {ocorrencia.horaInicio}–
+                    {ocorrencia.horaFim}
+                  </strong>
+                  <small>{ocorrencia.localEndereco}</small>
+                </span>
+                <em>{situacao(ocorrencia)}</em>
+              </label>
+            ))
+          )}
         </div>
-        <div className="pickup">
-          <MapPin size={18} />
-          <div>
-            <strong>Feira Central</strong>
-            <span>Praça da Matriz, 100 · sábado, 08h às 12h</span>
-          </div>
-        </div>
+        {erro && <p className="checkout-erro">{erro}</p>}
         <button
           className="primary wide"
-          disabled={loading || !date}
-          onClick={() =>
-            onSubmit({
-              produtoId: product.id,
-              quantidade: quantity,
-              dataRetirada: date,
-              horaRetirada: time,
-              localRetiradaId: 1,
-            })
-          }
+          disabled={loading || !escolhida}
+          onClick={confirmar}
         >
           {loading ? "Processando..." : "Confirmar e pagar"}{" "}
           <ArrowRight size={17} />
@@ -696,6 +778,19 @@ function SellView({
     productsPage * pageSize,
   );
   const visibleInvoices = invoices.slice((invoicesPage - 1) * pageSize, invoicesPage * pageSize);
+  const hoje = hojeLocal();
+  const proximaRetirada = invoices
+    .filter(
+      (invoice) =>
+        invoice.retirada?.status === "ATIVA" &&
+        invoice.retirada.data >= hoje &&
+        !["ENTREGUE", "CANCELADO"].includes(invoice.pedido_status),
+    )
+    .sort(
+      (a, b) =>
+        a.retirada.data.localeCompare(b.retirada.data) ||
+        a.retirada.horaInicio.localeCompare(b.retirada.horaInicio),
+    )[0];
   return (
     <main className="content seller">
       <div className="page-heading">
@@ -763,6 +858,7 @@ function SellView({
         total={products.length}
         onChange={setProductsPage}
       />
+      <PickupWindows vendedorId={userId} notify={notify} />
       <SellerOrders
         notify={notify}
         vendedorId={userId}
@@ -803,11 +899,15 @@ function SellView({
           ))
         )}
       </section>
-      {invoices[0]?.proxima_retirada && (
+      {proximaRetirada && (
         <div className="seller-note">
           <Sprout size={22} />
           <span>
-            <strong>Próxima retirada</strong> em {invoices[0].proxima_retirada} · Fatura #{invoices[0].proxima_retirada_fatura_id}
+            <strong>Próxima retirada</strong> em{" "}
+            {diaDaSemana(proximaRetirada.retirada.data)},{" "}
+            {dataBR(proximaRetirada.retirada.data)} ·{" "}
+            {faixa(proximaRetirada.retirada)} ·{" "}
+            {proximaRetirada.retirada.localNome} · Fatura #{proximaRetirada.id}
           </span>
           <MapPin size={17} />
         </div>
@@ -831,8 +931,12 @@ function SellerOrders({ notify, vendedorId, onStatusChanged }) {
   const [orders, setOrders] = useState([]);
   const [ordersPage, setOrdersPage] = useState(1);
   const pageSize = 5;
-  const load = async () =>
-    setOrders(await (await fetch(`${API}/pedidos/recebidos?vendedorId=${vendedorId}`)).json());
+  const load = async () => {
+    const recebidos = await (
+      await fetch(`${API}/pedidos/recebidos?vendedorId=${vendedorId}`)
+    ).json();
+    setOrders(await comRetirada(recebidos, "id"));
+  };
   useEffect(() => {
     load();
   }, [vendedorId]);
@@ -844,12 +948,17 @@ function SellerOrders({ notify, vendedorId, onStatusChanged }) {
     ordersPage * pageSize,
   );
   const update = async (id, status) => {
-    await fetch(`${API}/pedidos/${id}/status`, {
+    const response = await fetch(`${API}/pedidos/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, vendedorId }),
     });
     await Promise.all([load(), onStatusChanged()]);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      notify(body.message || "Não foi possível atualizar o status.");
+      return;
+    }
     notify("Status do pedido atualizado.");
   };
   return (
@@ -872,12 +981,12 @@ function SellerOrders({ notify, vendedorId, onStatusChanged }) {
               </div>
               <div>
                 <strong>{order.comprador_nome}</strong>
-                <small>
-                  Retirada em {order.data_retirada} · {money(order.valor_total)}
-                </small>
+                <small>{money(order.valor_total)}</small>
+                <RetiradaInfo retirada={order.retirada} />
               </div>
               <select
                 value={order.status}
+                disabled={order.status === "CANCELADO"}
                 onChange={(event) => update(order.id, event.target.value)}
               >
                 <option>PENDENTE</option>
@@ -901,6 +1010,183 @@ function SellerOrders({ notify, vendedorId, onStatusChanged }) {
   );
 }
 
+function PickupWindows({ vendedorId, notify }) {
+  const vazio = {
+    localId: "",
+    localNome: "",
+    localEndereco: "",
+    diaSemana: "6",
+    horaInicio: "08:00",
+    horaFim: "12:00",
+    capacidadeAtendimento: "3",
+  };
+  const [janelas, setJanelas] = useState([]);
+  const [locais, setLocais] = useState([]);
+  const [capacidades, setCapacidades] = useState({});
+  const [form, setForm] = useState(vazio);
+  const load = async () => {
+    const [listaJanelas, listaLocais] = await Promise.all([
+      fetch(`${API}/retiradas/horarios?vendedorId=${vendedorId}`).then((r) => r.json()),
+      fetch(`${API}/retiradas/locais?vendedorId=${vendedorId}`).then((r) => r.json()),
+    ]);
+    setJanelas(listaJanelas);
+    setLocais(listaLocais);
+    setCapacidades(
+      Object.fromEntries(listaJanelas.map((janela) => [janela.id, janela.capacidade_atendimento])),
+    );
+  };
+  useEffect(() => {
+    load();
+  }, [vendedorId]);
+  const enviar = async (url, method, body) => {
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "Não foi possível salvar.");
+    return data;
+  };
+  const campo = (nome) => (event) => setForm({ ...form, [nome]: event.target.value });
+  const criar = async (event) => {
+    event.preventDefault();
+    try {
+      const localId =
+        form.localId ||
+        (
+          await enviar(`${API}/retiradas/locais`, "POST", {
+            vendedorId,
+            nome: form.localNome,
+            endereco: form.localEndereco,
+          })
+        ).id;
+      await enviar(`${API}/retiradas/horarios`, "POST", {
+        localId: Number(localId),
+        diaSemana: Number(form.diaSemana),
+        horaInicio: form.horaInicio,
+        horaFim: form.horaFim,
+        capacidadeAtendimento: Number(form.capacidadeAtendimento),
+      });
+      setForm(vazio);
+      await load();
+      notify("Janela de retirada criada.");
+    } catch (error) {
+      await load();
+      notify(error.message);
+    }
+  };
+  const salvarCapacidade = async (id) => {
+    try {
+      await enviar(`${API}/retiradas/horarios/${id}`, "PATCH", {
+        capacidadeAtendimento: Number(capacidades[id]),
+      });
+      await load();
+      notify("Capacidade atualizada.");
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+  return (
+    <section className="orders-section">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow dark">RETIRADA</p>
+          <h2>Janelas de retirada</h2>
+        </div>
+        <span>{janelas.length} janelas</span>
+      </div>
+      <div className="pickup-windows">
+        {janelas.length === 0 ? (
+          <p className="empty">Cadastre a primeira janela para receber pedidos.</p>
+        ) : (
+          janelas.map((janela) => (
+            <div className="window-row" key={janela.id}>
+              <div>
+                <strong>{janela.local_nome}</strong>
+                <small>{janela.local_endereco}</small>
+              </div>
+              <span>
+                {DIAS[janela.dia_semana]} · {janela.hora_inicio}–{janela.hora_fim}
+              </span>
+              <label>
+                Capacidade
+                <input
+                  type="number"
+                  min="1"
+                  value={capacidades[janela.id] ?? ""}
+                  onChange={(event) =>
+                    setCapacidades({ ...capacidades, [janela.id]: event.target.value })
+                  }
+                />
+              </label>
+              <button className="outline" onClick={() => salvarCapacidade(janela.id)}>
+                Salvar
+              </button>
+            </div>
+          ))
+        )}
+        <form className="window-form" onSubmit={criar}>
+          <label>
+            Local
+            <select value={form.localId} onChange={campo("localId")}>
+              <option value="">Novo local</option>
+              {locais.map((local) => (
+                <option key={local.id} value={local.id}>
+                  {local.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          {form.localId === "" && (
+            <>
+              <label>
+                Nome do local
+                <input required value={form.localNome} onChange={campo("localNome")} />
+              </label>
+              <label>
+                Endereço
+                <input required value={form.localEndereco} onChange={campo("localEndereco")} />
+              </label>
+            </>
+          )}
+          <label>
+            Dia da semana
+            <select value={form.diaSemana} onChange={campo("diaSemana")}>
+              {DIAS.map((dia, indice) => (
+                <option key={dia} value={indice}>
+                  {dia}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Início
+            <input type="time" required value={form.horaInicio} onChange={campo("horaInicio")} />
+          </label>
+          <label>
+            Fim
+            <input type="time" required value={form.horaFim} onChange={campo("horaFim")} />
+          </label>
+          <label>
+            Capacidade
+            <input
+              type="number"
+              min="1"
+              required
+              value={form.capacidadeAtendimento}
+              onChange={campo("capacidadeAtendimento")}
+            />
+          </label>
+          <button className="primary">
+            <Plus size={16} /> Adicionar janela
+          </button>
+        </form>
+      </div>
+    </section>
+  );
+}
+
 function ProductForm({ product, onClose, onSaved, userId }) {
   const [data, setData] = useState({
     nome: product?.nome || "",
@@ -914,9 +1200,6 @@ function ProductForm({ product, onClose, onSaved, userId }) {
     loteId: product?.lote_id || "",
     dataValidade: product?.data_validade || "",
     quantidadeEstoque: product?.quantidade_disponivel ?? "",
-    localId: product?.local_retirada_id || "",
-    localNome: product?.local_nome || "Feira Central",
-    localEndereco: product?.local_endereco || "Praça da Matriz, 100 - Centro",
   });
   const change = (event) =>
     setData({
@@ -978,8 +1261,6 @@ function ProductForm({ product, onClose, onSaved, userId }) {
           ["dataCadastro", "Data de cadastro"],
           ["dataValidade", "Data de vencimento"],
           ["quantidadeEstoque", "Quantidade em estoque"],
-          ["localNome", "Local de retirada"],
-          ["localEndereco", "Endereço de retirada"],
         ].map(([name, label]) => (
           <label key={name}>
             {label}
@@ -1192,11 +1473,25 @@ function InvoiceReading({ invoices }) {
                 <div>
                   <b>Retirada</b>
                   <p>
-                    {invoice.data_retirada} às {invoice.hora_retirada}
-                    <br />
-                    {invoice.local_nome}
-                    <br />
-                    {invoice.local_endereco}
+                    {invoice.retirada ? (
+                      <>
+                        {diaDaSemana(invoice.retirada.data)},{" "}
+                        {dataBR(invoice.retirada.data)} ·{" "}
+                        {faixa(invoice.retirada)}
+                        <br />
+                        {invoice.retirada.localNome}
+                        <br />
+                        {invoice.retirada.localEndereco}
+                        {invoice.retirada.status === "LIBERADA" && (
+                          <>
+                            <br />
+                            Vaga liberada
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      "Retirada não informada."
+                    )}
                   </p>
                 </div>
                 <div>
