@@ -1,5 +1,7 @@
 package br.ufla.feiralivre;
 
+import java.time.LocalDate;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -41,6 +43,29 @@ public final class TestData {
         db.update("INSERT INTO local_retirada (usuario_id, nome, endereco) VALUES (?, ?, 'Endereço de teste')",
             vendedorId, nome);
         return db.queryForObject("SELECT last_insert_rowid()", Long.class);
+    }
+
+    public static long janela(JdbcTemplate db, long localId, LocalDate data, int capacidade) {
+        return janela(db, localId, data, capacidade, "00:00", "23:59");
+    }
+
+    /**
+     * A janela nasce no dia da semana da data informada, para o teste não
+     * depender do dia em que roda.
+     */
+    public static long janela(JdbcTemplate db, long localId, LocalDate data, int capacidade, String horaInicio, String horaFim) {
+        db.update("INSERT INTO horario_retirada (local_retirada_id, dia_semana, hora_inicio, hora_fim, capacidade_atendimento) "
+            + "VALUES (?, ?, ?, ?, ?)",
+            localId, data.getDayOfWeek().getValue() % 7, horaInicio, horaFim, capacidade);
+        return db.queryForObject("SELECT last_insert_rowid()", Long.class);
+    }
+
+    /**
+     * Entrega referencia o pedido só por id, sem FK: os testes do contexto
+     * reservam vagas sem precisar criar um pedido de verdade.
+     */
+    public static long pedidoFicticio() {
+        return System.currentTimeMillis() * 1_000L + SEQ.incrementAndGet() % 1_000L;
     }
 
     public static long lote(JdbcTemplate db, long produtoId, int diasAteVencer, int quantidade) {

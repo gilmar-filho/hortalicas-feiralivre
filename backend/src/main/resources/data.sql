@@ -6,4 +6,4 @@ INSERT OR IGNORE INTO lote (id, produto_id, origem, data_producao, data_validade
 INSERT OR IGNORE INTO lote (id, produto_id, origem, data_producao, data_validade, quantidade_total, quantidade_disponivel) VALUES (2, 2, 'Sítio Boa Terra', date('now'), date('now','+10 day'), 45, 45);
 INSERT OR IGNORE INTO lote (id, produto_id, origem, data_producao, data_validade, quantidade_total, quantidade_disponivel) VALUES (3, 3, 'Horta da Serra', date('now'), date('now','+14 day'), 60, 60);
 INSERT OR IGNORE INTO local_retirada (id, usuario_id, nome, endereco) VALUES (1, 1, 'Feira Central', 'Praça da Matriz, 100 - Centro');
-INSERT OR IGNORE INTO horario_retirada (id, local_retirada_id, dia_semana, hora_inicio, hora_fim) VALUES (1, 1, 6, '08:00', '12:00');
+INSERT OR IGNORE INTO horario_retirada (id, local_retirada_id, dia_semana, hora_inicio, hora_fim, capacidade_atendimento) VALUES (1, 1, 6, '08:00', '12:00', 3);

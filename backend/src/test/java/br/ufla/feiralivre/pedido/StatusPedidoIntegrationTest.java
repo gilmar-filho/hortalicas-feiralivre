@@ -1,6 +1,7 @@
 package br.ufla.feiralivre.pedido;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.LocalDate;
 import java.util.Map;
@@ -9,8 +10,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import br.ufla.feiralivre.TestData;
+import br.ufla.feiralivre.entrega.service.EntregaService;
 import br.ufla.feiralivre.pedido.dto.CriarPedidoRequest;
 import br.ufla.feiralivre.pedido.service.PedidoService;
 
@@ -98,9 +101,29 @@ public class StatusPedidoIntegrationTest {
         assertEquals("PENDENTE", statusPedido(pedidoId), "O pedido não muda quando o status é inválido");
     }
 
+    @Test
+    public void pedidoCanceladoNaoPodeVoltarParaOutroStatus() {
+        long vendedorId = TestData.usuario(db, "Vendedor terminal", TestData.email("vendedor.terminal"), "123456");
+        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de estado terminal");
+        long produtoId = TestData.produto(db, vendedorId, "Rabanete (estado terminal)", 3.00);
+        long loteId = TestData.lote(db, produtoId, 7, 30);
+        long pedidoId = criarPedido(produtoId, 4, localId);
+        pedidoService.atualizarStatus(pedidoId, "CANCELADO", vendedorId);
+
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+            () -> pedidoService.atualizarStatus(pedidoId, "PENDENTE", vendedorId));
+
+        assertEquals(409, e.getStatusCode().value());
+        assertEquals("Pedido cancelado não pode mudar de status", e.getReason());
+        assertEquals("CANCELADO", statusPedido(pedidoId), "Reativar deixaria o pedido sem estoque e sem vaga");
+        assertEquals(30, disponivel(loteId));
+    }
+
     private long criarPedido(long produtoId, int quantidade, long localId) {
+        LocalDate dataRetirada = EntregaService.hoje().plusDays(2);
+        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
         Map<String, Object> pedido = pedidoService.criar(new CriarPedidoRequest(
-            produtoId, quantidade, LocalDate.now().plusDays(2).toString(), "09:00", localId, 1L));
+            produtoId, quantidade, horarioId, dataRetirada.toString(), 1L));
         return ((Number) pedido.get("id")).longValue();
     }
 

@@ -7,26 +7,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import br.ufla.feiralivre.entrega.service.EntregaService;
 import br.ufla.feiralivre.producao.repository.ProducaoRepository;
-import jakarta.annotation.PostConstruct;
 
 @Service
 public class ProducaoService {
     private final ProducaoRepository repository;
-    private final EntregaService entrega;
 
-    public ProducaoService(ProducaoRepository repository, EntregaService entrega) { this.repository = repository; this.entrega = entrega; }
-
-    @PostConstruct
-    public void migrarEstruturaLegada() { repository.migrarLocalDoProduto(); }
+    public ProducaoService(ProducaoRepository repository) { this.repository = repository; }
 
     public List<Map<String, Object>> listar(String busca, Long usuarioId) { return repository.listar(busca, usuarioId); }
     public Map<String, Object> produtoAtivo(long id) { List<Map<String, Object>> produtos = repository.produtoAtivo(id); if (produtos.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não está disponível"); return produtos.get(0); }
     public List<Map<String, Object>> lotesDisponiveis(long produtoId, String data) { return repository.lotesDisponiveis(produtoId, data); }
-    public long salvarLocal(Map<String, Object> dados) { return entrega.criarLocalSeNecessario(dados); }
-    public Map<String, Object> criar(Map<String, Object> dados) { long localId = salvarLocal(dados); Map<String, Object> produto = repository.criarProduto(dados, localId); criarLote(((Number) produto.get("id")).longValue(), dados); return produto; }
-    public Map<String, Object> editar(long id, Map<String, Object> dados) { long localId = salvarLocal(dados); repository.atualizarProduto(id, dados, localId); String loteId = String.valueOf(dados.getOrDefault("loteId", "")).trim(); if (!loteId.isEmpty() && dados.get("quantidadeEstoque") != null) atualizarLote(Long.parseLong(loteId), dados); else if (dados.get("quantidadeEstoque") != null) criarLote(id, dados); return repository.produto(id); }
+    public Map<String, Object> criar(Map<String, Object> dados) { Map<String, Object> produto = repository.criarProduto(dados); criarLote(((Number) produto.get("id")).longValue(), dados); return produto; }
+    public Map<String, Object> editar(long id, Map<String, Object> dados) { repository.atualizarProduto(id, dados); String loteId = String.valueOf(dados.getOrDefault("loteId", "")).trim(); if (!loteId.isEmpty() && dados.get("quantidadeEstoque") != null) atualizarLote(Long.parseLong(loteId), dados); else if (dados.get("quantidadeEstoque") != null) criarLote(id, dados); return repository.produto(id); }
     public void desativar(long id) { repository.desativar(id); }
     public Map<String, Object> criarLote(long produtoId, Map<String, Object> dados) { validarLote(dados); return repository.criarLote(produtoId, dados); }
     public Map<String, Object> atualizarLote(long loteId, Map<String, Object> dados) { validarLote(dados); repository.atualizarLote(loteId, dados); return repository.lote(loteId); }

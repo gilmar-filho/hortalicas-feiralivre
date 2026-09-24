@@ -81,6 +81,23 @@ public class CatalogoIntegrationTest {
         assertFalse(contemProduto(catalogo, ignorado), "A busca não traz quem não casa com o termo");
     }
 
+    @Test
+    public void validadeMaximaDeveIgnorarLotesVencidosEZerados() {
+        long vendedorId = TestData.usuario(db, "Vendedor validade máx", TestData.email("vendedor.validademax"), "123456");
+        long produtoId = TestData.produto(db, vendedorId, "Vagem do catálogo", 5.00);
+        TestData.lote(db, produtoId, 5, 10);
+        long loteMaisLongoComSaldo = TestData.lote(db, produtoId, 12, 3);
+        TestData.lote(db, produtoId, 20, 0);
+        TestData.lote(db, produtoId, -1, 100);
+
+        Map<String, Object> produto = buscarNoCatalogo(produtoId, vendedorId);
+
+        String esperada = db.queryForObject(
+            "SELECT data_validade FROM lote WHERE id = ?", String.class, loteMaisLongoComSaldo);
+        assertEquals(esperada, produto.get("validade_maxima"),
+            "O checkout usa esta data para não oferecer retirada em que o estoque já venceu");
+    }
+
     private Map<String, Object> buscarNoCatalogo(long produtoId, long vendedorId) {
         return producaoService.listar("", vendedorId).stream()
             .filter(p -> ((Number) p.get("id")).longValue() == produtoId)

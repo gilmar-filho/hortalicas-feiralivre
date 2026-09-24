@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import br.ufla.feiralivre.TestData;
+import br.ufla.feiralivre.entrega.service.EntregaService;
 import br.ufla.feiralivre.faturamento.service.FaturamentoService;
 import br.ufla.feiralivre.pedido.dto.CriarPedidoRequest;
 import br.ufla.feiralivre.pedido.service.PedidoService;
@@ -91,8 +92,10 @@ public class FaturamentoIntegrationTest {
     }
 
     private long criarPedido(long produtoId, int quantidade, long localId, long compradorId) {
+        LocalDate dataRetirada = EntregaService.hoje().plusDays(2);
+        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
         Map<String, Object> pedido = pedidoService.criar(new CriarPedidoRequest(
-            produtoId, quantidade, LocalDate.now().plusDays(2).toString(), "09:00", localId, compradorId));
+            produtoId, quantidade, horarioId, dataRetirada.toString(), compradorId));
         return ((Number) pedido.get("id")).longValue();
     }
 

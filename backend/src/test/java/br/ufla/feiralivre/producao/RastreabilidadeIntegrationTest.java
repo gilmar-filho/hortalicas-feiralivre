@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import br.ufla.feiralivre.TestData;
+import br.ufla.feiralivre.entrega.service.EntregaService;
 
 /**
  * A pergunta que o produto existe para responder: dado um pedido, de qual
@@ -77,12 +78,13 @@ public class RastreabilidadeIntegrationTest {
     }
 
     private long criarPedido(long produtoId, int quantidade, long localId) {
+        LocalDate dataRetirada = EntregaService.hoje().plusDays(1);
+        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
         Map<String, Object> request = Map.of(
             "produtoId", produtoId,
             "quantidade", quantidade,
-            "dataRetirada", LocalDate.now().plusDays(1).toString(),
-            "horaRetirada", "09:00",
-            "localRetiradaId", localId,
+            "horarioRetiradaId", horarioId,
+            "dataRetirada", dataRetirada.toString(),
             "compradorId", 1
         );
         ResponseEntity<Map> response = restTemplate.postForEntity("/api/pedidos", request, Map.class);

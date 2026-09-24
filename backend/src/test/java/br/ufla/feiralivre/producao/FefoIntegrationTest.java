@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import br.ufla.feiralivre.TestData;
+import br.ufla.feiralivre.entrega.service.EntregaService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class FefoIntegrationTest {
@@ -38,7 +39,7 @@ public class FefoIntegrationTest {
         long loteValidadeLonga = TestData.lote(db, produtoId, 10, 50);
         long loteValidadeCurta = TestData.lote(db, produtoId, 3, 50);
 
-        long pedidoId = criarPedido(produtoId, 5, localId, LocalDate.now().plusDays(1));
+        long pedidoId = criarPedido(produtoId, 5, localId, EntregaService.hoje().plusDays(1));
 
         long loteReservado = db.queryForObject(
             "SELECT lote_id FROM reserva_estoque WHERE pedido_id = ?", Long.class, pedidoId);
@@ -61,7 +62,7 @@ public class FefoIntegrationTest {
 
         // 12 unidades não cabem no lote que vence primeiro: 5 saem dele,
         // 7 do seguinte na ordem de validade, e o mais distante fica intacto.
-        long pedidoId = criarPedido(produtoId, 12, localId, LocalDate.now().plusDays(1));
+        long pedidoId = criarPedido(produtoId, 12, localId, EntregaService.hoje().plusDays(1));
 
         assertEquals(0, disponivel(lotePerto), "O lote que vence primeiro é esvaziado antes de usar outro");
         assertEquals(3, disponivel(loteMeio), "O restante sai do segundo lote na ordem de validade");
@@ -87,7 +88,7 @@ public class FefoIntegrationTest {
         long loteAindaValido = TestData.lote(db, produtoId, 15, 40);
 
         // A retirada é daqui a 8 dias: o lote que vence em 2 não chega lá.
-        long pedidoId = criarPedido(produtoId, 3, localId, LocalDate.now().plusDays(8));
+        long pedidoId = criarPedido(produtoId, 3, localId, EntregaService.hoje().plusDays(8));
 
         long loteReservado = db.queryForObject(
             "SELECT lote_id FROM reserva_estoque WHERE pedido_id = ?", Long.class, pedidoId);
@@ -103,7 +104,7 @@ public class FefoIntegrationTest {
         long produtoId = TestData.produto(db, vendedorId, "Salsa (estoque vencido)", 2.00);
         TestData.lote(db, produtoId, 2, 40);
 
-        ResponseEntity<Map> response = postPedido(produtoId, 3, localId, LocalDate.now().plusDays(10));
+        ResponseEntity<Map> response = postPedido(produtoId, 3, localId, EntregaService.hoje().plusDays(10));
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode(),
             "Estoque que não chega válido na data da retirada não conta como disponível");
@@ -117,12 +118,12 @@ public class FefoIntegrationTest {
     }
 
     private ResponseEntity<Map> postPedido(long produtoId, int quantidade, long localId, LocalDate dataRetirada) {
+        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
         Map<String, Object> request = Map.of(
             "produtoId", produtoId,
             "quantidade", quantidade,
+            "horarioRetiradaId", horarioId,
             "dataRetirada", dataRetirada.toString(),
-            "horaRetirada", "09:00",
-            "localRetiradaId", localId,
             "compradorId", 1
         );
         return restTemplate.postForEntity("/api/pedidos", request, Map.class);
