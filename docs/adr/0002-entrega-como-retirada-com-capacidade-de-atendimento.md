@@ -78,15 +78,24 @@ Modelagem:
 
 - `horario_retirada.capacidade_atendimento` — inteiro, definido pelo
   produtor ao cadastrar a janela.
-- `reserva_atendimento (pedido_id, horario_retirada_id,
-  data_retirada)` — a reserva concreta, espelhando a relação que
-  `reserva_estoque` já estabelece entre pedido e lote.
+- `reserva_atendimento (pedido_id, comprador_id,
+  horario_retirada_id, data_retirada, status)` — a reserva concreta,
+  espelhando a relação que `reserva_estoque` já estabelece entre
+  pedido e lote. A vaga é liberada mudando `status` de `ATIVA` para
+  `LIBERADA`, não apagando a linha, para que o histórico da janela
+  continue verificável.
 
 A capacidade mora na janela recorrente; a ocupação é contada nas
 reservas de uma data específica. `horario_retirada` descreve um
 padrão semanal (`dia_semana`), não uma data — a janela de um sábado e
 a do sábado seguinte são o mesmo registro com ocupações
 independentes.
+
+A capacidade conta compradores, não pedidos: a ocupação de uma
+ocorrência é o número de compradores distintos com reserva `ATIVA`.
+Um comprador que já ocupa a vaga pode fazer outro pedido para a mesma
+ocorrência mesmo com ela cheia, e só deixa de ocupá-la quando não
+resta nenhum pedido ativo dele ali.
 
 ### 3. Entrega entra no fluxo de criação do pedido
 `PedidoService.criar()` passa a pedir a reserva do atendimento a
@@ -99,22 +108,39 @@ e o teste da SAGA ganha a asserção que hoje não existe: após forçar a
 recusa do pagamento, verificar que o estoque voltou ao lote **e** que
 a vaga voltou à janela.
 
+A retirada passa a existir só em Entrega. Pedido deixa de guardar
+local, data e horário de retirada; as telas que mostram pedido e
+retirada juntos compõem os dois contextos, papel que depois da
+extração cabe ao BFF. Pelo mesmo motivo, o local de retirada sai do
+cadastro do produto, e Produção deixa de depender de Entrega.
+
 ### 4. O não comparecimento é confirmado, não inferido
 Quando a janela encerra e o pedido não foi baixado como retirado, o
 sistema **não** conclui que o comprador faltou. Ausência de registro
 não é registro de ausência: o produtor pode estar sem rede no ponto
 de encontro, ou ter esquecido de dar baixa.
 
-O sistema notifica o produtor perguntando se a retirada ocorreu, e o
-pedido permanece em um estado explícito de indefinição até a
-resposta. Se o produtor não responder, o sistema insiste e escala,
-mas não decide pelo produtor: o pedido fica pendente e visível, sem
-que o sistema afirme um fato que não observou.
+O sistema notifica o produtor perguntando se a retirada ocorreu, e a
+reserva de atendimento permanece em um estado explícito de
+indefinição até a resposta. O estado é da reserva, em Entrega, e não
+do pedido: Pedido só reage aos fatos confirmados. Se o produtor não
+responder, o sistema insiste e escala, mas não decide pelo produtor:
+a pendência fica visível, sem que o sistema afirme um fato que não
+observou. Com um único produtor no escopo, escalar significa aumentar
+a visibilidade da pendência para o mesmo produtor, não trocar de
+destinatário.
 
 Confirmado o não comparecimento, a retirada é reagendada para a
-próxima janela se o lote ainda estiver acima do limite mínimo de
-validade, ou registrada como quebra se estiver abaixo — a mesma regra
-que já governa a devolução de reserva na compensação da SAGA.
+próxima ocorrência com vaga se o lote ainda estiver acima do limite
+mínimo de validade, ou registrada como quebra se estiver abaixo. Esse
+limite ainda não existe no código: a devolução de reserva hoje só
+repõe a quantidade no lote, e a regra nasce com a SAGA.
+
+Como o produto é fungível, a direção a revisitar quando este fluxo
+for implementado é outra: reagendar libera a reserva de estoque e
+realoca por FEFO para a nova data, e o lote antigo volta a ficar
+disponível para quem retira antes. A quebra passa a ser um evento do
+lote em Produção, e não um desfecho do pedido.
 
 Este fluxo é assíncrono e separado da SAGA de confirmação do pedido.
 A decisão fica registrada aqui porque nasce do mesmo desenho do
@@ -135,10 +161,11 @@ disputando a última vaga da mesma janela. Dentro do monólito a
 transação resolve; após a extração, não. O tratamento será decidido
 no ADR de extração dos serviços.
 
-O estado do pedido ganha um valor a mais, para a janela encerrada sem
+A reserva de atendimento ganha estados além de ativa e liberada
+(retirada, indefinida, não compareceu) para a janela encerrada sem
 confirmação. Estados que representam incerteza são mais honestos que
 estados que escondem um palpite, mas ampliam a máquina de estados e
-as telas que a exibem.
+as telas que a exibem. A máquina de estados do pedido não muda.
 
 A notificação ao produtor será um consumidor de eventos, não um novo
 contexto delimitado. Ela reage ao encerramento da janela sem exigir

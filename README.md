@@ -39,6 +39,13 @@ cd hortalicas-feiralivre
 
 Qualquer Pull Request aberto passará automaticamente pelas verificações de segurança de `Build` (arquivos obrigatórios) e `Lint` (formatação markdown) configuradas no arquivo `.github/workflows/ci.yml`.
 
+## 🗄️ Banco de dados local
+
+O backend usa SQLite em `backend/data/feira-livre-v2.db`, criado na
+primeira execução. Quem tinha o arquivo antigo
+`backend/data/feira-livre.db` pode apagá-lo: o esquema mudou e ele
+não é mais lido.
+
 ## 👥 Equipe e Organização
 
 | Membro | GitHub |

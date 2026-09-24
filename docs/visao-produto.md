@@ -41,7 +41,7 @@ ponto de encontro.
 Encerrada a janela sem baixa, o sistema não conclui que o comprador
 faltou: ausência de registro não é registro de ausência, e o produtor
 pode apenas ter ficado sem rede. O sistema pergunta ao produtor se a
-retirada ocorreu, e o pedido fica em um estado explícito de
+retirada ocorreu, e a retirada fica em um estado explícito de
 indefinição até a resposta. Confirmado o não comparecimento, a
 retirada é reagendada se o lote ainda estiver acima do limite mínimo
 de validade, ou vira quebra se estiver abaixo.
