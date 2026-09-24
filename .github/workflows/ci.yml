@@ -22,6 +22,20 @@ jobs:
           done
           echo "Todos os arquivos obrigatórios estão presentes."
 
+  test:
+    name: Testes (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: mvn test
+        run: mvn -B test
+        working-directory: backend
+
   lint:
     name: Lint (Markdown)
     runs-on: ubuntu-latest
