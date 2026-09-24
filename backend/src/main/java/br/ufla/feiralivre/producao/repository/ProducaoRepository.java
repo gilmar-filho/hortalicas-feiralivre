@@ -23,7 +23,7 @@ public class ProducaoRepository {
         return db.queryForList(sql, "%" + busca + "%");
     }
 
-    public Map<String, Object> produtoAtivo(long id) { return db.queryForMap("SELECT * FROM produto WHERE id=? AND ativo=1", id); }
+    public List<Map<String, Object>> produtoAtivo(long id) { return db.queryForList("SELECT * FROM produto WHERE id=? AND ativo=1", id); }
     public List<Map<String, Object>> lotesDisponiveis(long produtoId, String data) { return db.queryForList("SELECT * FROM lote WHERE produto_id=? AND data_validade >= ? AND quantidade_disponivel > 0 ORDER BY data_validade", produtoId, data); }
     public Map<String, Object> criarProduto(Map<String, Object> dados, long localId) {
         db.update("INSERT INTO produto (usuario_id,nome,categoria,descricao,foto,preco,ativo,data_cadastro,local_retirada_id) VALUES (?,?,?,?,?,?,?,?,?)", dados.get("usuarioId"), dados.get("nome"), dados.getOrDefault("categoria", "Hortaliças"), dados.get("descricao"), dados.get("foto"), dados.get("preco"), dados.get("ativo"), dados.get("dataCadastro"), localId);

@@ -22,7 +22,7 @@ public class ProducaoService {
     public void migrarEstruturaLegada() { repository.migrarLocalDoProduto(); }
 
     public List<Map<String, Object>> listar(String busca, Long usuarioId) { return repository.listar(busca, usuarioId); }
-    public Map<String, Object> produtoAtivo(long id) { return repository.produtoAtivo(id); }
+    public Map<String, Object> produtoAtivo(long id) { List<Map<String, Object>> produtos = repository.produtoAtivo(id); if (produtos.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Produto não está disponível"); return produtos.get(0); }
     public List<Map<String, Object>> lotesDisponiveis(long produtoId, String data) { return repository.lotesDisponiveis(produtoId, data); }
     public long salvarLocal(Map<String, Object> dados) { return entrega.criarLocalSeNecessario(dados); }
     public Map<String, Object> criar(Map<String, Object> dados) { long localId = salvarLocal(dados); Map<String, Object> produto = repository.criarProduto(dados, localId); criarLote(((Number) produto.get("id")).longValue(), dados); return produto; }
