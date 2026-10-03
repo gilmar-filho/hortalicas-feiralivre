@@ -1,0 +1,53 @@
+services:
+  nucleo:
+    build: ./servicos/nucleo
+    environment:
+      PRODUCAO_URL: http://producao:8082
+      ENTREGA_URL: http://entrega:8083
+    volumes:
+      - nucleo-dados:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  producao:
+    build: ./servicos/producao
+    volumes:
+      - producao-dados:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  entrega:
+    build: ./servicos/entrega
+    volumes:
+      - entrega-dados:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    depends_on:
+      nucleo:
+        condition: service_started
+      producao:
+        condition: service_started
+      entrega:
+        condition: service_started
+
+volumes:
+  nucleo-dados:
+  producao-dados:
+  entrega-dados:
