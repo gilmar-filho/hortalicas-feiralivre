@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const API = "http://localhost:8080/api";
+const API = "/api";
 const money = (value) =>
   Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -38,6 +38,23 @@ async function comRetirada(registros, chavePedido) {
   return registros.map((registro) => ({
     ...registro,
     retirada: porPedido.get(registro[chavePedido]) || null,
+  }));
+}
+
+async function comLotes(faturas) {
+  const ids = [...new Set(faturas.map((fatura) => fatura.pedido_id))];
+  if (ids.length === 0) return faturas;
+  const resposta = await fetch(`${API}/produtos/reservas?pedidoIds=${ids.join(",")}`).catch(() => null);
+  const reservas = resposta?.ok ? await resposta.json() : [];
+  const porPedido = new Map();
+  for (const reserva of reservas) {
+    const linhas = porPedido.get(reserva.pedidoId) || [];
+    linhas.push(`${reserva.origem} | validade: ${reserva.dataValidade}`);
+    porPedido.set(reserva.pedidoId, linhas);
+  }
+  return faturas.map((fatura) => ({
+    ...fatura,
+    lotes: (porPedido.get(fatura.pedido_id) || []).join("\n"),
   }));
 }
 
@@ -96,7 +113,7 @@ function App() {
     const faturas = await (
       await fetch(`${API}/faturamento?visao=vendedor&usuarioId=${currentUser.id}`)
     ).json();
-    setInvoices(await comRetirada(faturas, "pedido_id"));
+    setInvoices(await comRetirada(await comLotes(faturas), "pedido_id"));
   };
   useEffect(() => {
     if (currentUser) loadProducts();
