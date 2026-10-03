@@ -1,0 +1,5 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS local_retirada (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario_id INTEGER NOT NULL, nome TEXT NOT NULL, endereco TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS horario_retirada (id INTEGER PRIMARY KEY AUTOINCREMENT, local_retirada_id INTEGER NOT NULL, dia_semana INTEGER NOT NULL, hora_inicio TEXT NOT NULL, hora_fim TEXT NOT NULL, capacidade_atendimento INTEGER NOT NULL CHECK (capacidade_atendimento > 0), FOREIGN KEY(local_retirada_id) REFERENCES local_retirada(id));
+CREATE TABLE IF NOT EXISTS reserva_atendimento (id INTEGER PRIMARY KEY AUTOINCREMENT, pedido_id INTEGER NOT NULL, comprador_id INTEGER NOT NULL, horario_retirada_id INTEGER NOT NULL, data_retirada TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY(horario_retirada_id) REFERENCES horario_retirada(id));
+CREATE UNIQUE INDEX IF NOT EXISTS ux_reserva_atendimento_ativa ON reserva_atendimento(pedido_id) WHERE status = 'ATIVA';

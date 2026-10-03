@@ -6,23 +6,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.ufla.feiralivre.TestData;
+import br.ufla.feiralivre.contrato.ValidacaoDeContrato;
 import br.ufla.feiralivre.entrega.service.EntregaService;
-import br.ufla.feiralivre.pedido.service.PedidoService;
 
 /**
  * A invariante que justifica Entrega como contexto: nenhuma ocorrência de
@@ -40,8 +42,10 @@ public class EntregaIntegrationTest {
     @Autowired
     private JdbcTemplate db;
 
-    @Autowired
-    private PedidoService pedidoService;
+    @BeforeEach
+    public void validarContrato() {
+        ValidacaoDeContrato.instalar(restTemplate, "../../contracts/entrega.yaml");
+    }
 
     @Test
     public void deveReservarVagaAtivaParaOComprador() {
@@ -381,7 +385,7 @@ public class EntregaIntegrationTest {
     }
 
     private long pessoa(String prefixo) {
-        return TestData.usuario(db, prefixo, TestData.email(prefixo), "123456");
+        return TestData.id();
     }
 
     private LocalDate futura(int dias) {
@@ -435,121 +439,14 @@ public class EntregaIntegrationTest {
     }
 
     @Test
-    public void janelaCheiaDeveRecusarOPedidoSemDeixarNadaGravado() {
-        long vendedor = pessoa("produtor.fluxo.cheia");
-        long primeiro = pessoa("comprador.fluxo.primeiro");
-        long segundo = pessoa("comprador.fluxo.segundo");
-        long produto = TestData.produto(db, vendedor, "Alface (janela cheia)", 4.50);
-        long lote = TestData.lote(db, produto, 10, 50);
-        LocalDate data = futura(2);
-        long horario = janela(vendedor, data, 1);
-        assertEquals(HttpStatus.OK, postPedido(produto, 3, horario, data.toString(), primeiro).getStatusCode());
+    public void capacidadePorHttpDeveAtualizarAJanela() {
+        long vendedor = pessoa("produtor.patch");
+        long horario = janela(vendedor, futura(2), 3);
 
-        ResponseEntity<Map> recusado = postPedido(produto, 4, horario, data.toString(), segundo);
+        ResponseEntity<Map> resposta = restTemplate.exchange("/api/retiradas/horarios/" + horario,
+            HttpMethod.PATCH, new HttpEntity<>(Map.of("capacidadeAtendimento", 5)), Map.class);
 
-        assertEquals(HttpStatus.CONFLICT, recusado.getStatusCode());
-        assertEquals("Janela de retirada cheia", recusado.getBody().get("message"));
-        assertEquals(47, disponivel(lote), "O estoque reservado pelo pedido recusado volta ao lote");
-        assertEquals(0, contar("SELECT COUNT(*) FROM pedido WHERE comprador_id = ?", segundo));
-        assertEquals(1, contar("SELECT COUNT(*) FROM item_pedido WHERE produto_id = ?", produto));
-        assertEquals(1, contar("SELECT COUNT(*) FROM fatura f JOIN item_pedido i ON i.pedido_id = f.pedido_id WHERE i.produto_id = ?", produto));
-        assertEquals(1, ocupacao(horario, data));
-    }
-
-    @Test
-    public void pedidoComJanelaDeOutroProdutorDeveResponder404SemConsumirEstoque() {
-        long vendedor = pessoa("produtor.fluxo.dono");
-        long outro = pessoa("produtor.fluxo.outro");
-        long comprador = pessoa("comprador.fluxo.dono");
-        long produto = TestData.produto(db, vendedor, "Couve (janela alheia)", 4.00);
-        long lote = TestData.lote(db, produto, 10, 20);
-        LocalDate data = futura(2);
-
-        ResponseEntity<Map> resposta = postPedido(produto, 2, janela(outro, data, 5), data.toString(), comprador);
-
-        assertEquals(HttpStatus.NOT_FOUND, resposta.getStatusCode());
-        assertEquals("Janela de retirada não encontrada", resposta.getBody().get("message"));
-        assertEquals(20, disponivel(lote));
-    }
-
-    @Test
-    public void pedidoSemJanelaOuComDataMalformadaDeveResponder400() {
-        long vendedor = pessoa("produtor.fluxo.entrada");
-        long comprador = pessoa("comprador.fluxo.entrada");
-        long produto = TestData.produto(db, vendedor, "Salsa (entrada inválida)", 2.00);
-        long lote = TestData.lote(db, produto, 10, 20);
-        long horario = janela(vendedor, futura(2), 5);
-
-        ResponseEntity<Map> semJanela = postPedido(produto, 1, null, futura(2).toString(), comprador);
-        ResponseEntity<Map> dataInvalida = postPedido(produto, 1, horario, "2026-13-45", comprador);
-        ResponseEntity<Map> semData = postPedido(produto, 1, horario, null, comprador);
-
-        assertBadRequest(semJanela, "Informe a janela e a data de retirada");
-        assertBadRequest(dataInvalida, "Informe a janela e a data de retirada");
-        assertBadRequest(semData, "Informe a janela e a data de retirada");
-        assertEquals(20, disponivel(lote));
-    }
-
-    @Test
-    public void cancelamentoDoPedidoDeveLiberarAVaga() {
-        long vendedor = pessoa("produtor.fluxo.cancela");
-        long primeiro = pessoa("comprador.fluxo.cancela1");
-        long segundo = pessoa("comprador.fluxo.cancela2");
-        long produto = TestData.produto(db, vendedor, "Rúcula (cancelamento)", 3.00);
-        TestData.lote(db, produto, 10, 20);
-        LocalDate data = futura(2);
-        long horario = janela(vendedor, data, 1);
-        long pedido = ((Number) postPedido(produto, 1, horario, data.toString(), primeiro).getBody().get("id")).longValue();
-        assertEquals(HttpStatus.CONFLICT, postPedido(produto, 1, horario, data.toString(), segundo).getStatusCode());
-
-        pedidoService.atualizarStatus(pedido, "CANCELADO", vendedor);
-
-        assertEquals("LIBERADA", db.queryForObject(
-            "SELECT status FROM reserva_atendimento WHERE pedido_id = ?", String.class, pedido));
-        assertEquals(HttpStatus.OK, postPedido(produto, 1, horario, data.toString(), segundo).getStatusCode());
-    }
-
-    @Test
-    public void segundoPedidoDoMesmoCompradorEntraNaJanelaCheiaEAVagaSoVoltaComOsDoisCancelados() {
-        long vendedor = pessoa("produtor.fluxo.dois");
-        long comprador = pessoa("comprador.fluxo.dois");
-        long outro = pessoa("comprador.fluxo.outro");
-        long alface = TestData.produto(db, vendedor, "Alface (dois pedidos)", 4.00);
-        long tomate = TestData.produto(db, vendedor, "Tomate (dois pedidos)", 7.00);
-        TestData.lote(db, alface, 10, 20);
-        TestData.lote(db, tomate, 10, 20);
-        LocalDate data = futura(2);
-        long horario = janela(vendedor, data, 1);
-        long pedido1 = ((Number) postPedido(alface, 1, horario, data.toString(), comprador).getBody().get("id")).longValue();
-
-        ResponseEntity<Map> segundoPedido = postPedido(tomate, 1, horario, data.toString(), comprador);
-
-        assertEquals(HttpStatus.OK, segundoPedido.getStatusCode(), "Quem já ocupa a vaga pode pedir outro produto para a mesma ocorrência");
-        assertEquals(1, ocupacao(horario, data));
-        long pedido2 = ((Number) segundoPedido.getBody().get("id")).longValue();
-
-        pedidoService.atualizarStatus(pedido1, "CANCELADO", vendedor);
-        assertEquals(HttpStatus.CONFLICT, postPedido(alface, 1, horario, data.toString(), outro).getStatusCode());
-
-        pedidoService.atualizarStatus(pedido2, "CANCELADO", vendedor);
-        assertEquals(HttpStatus.OK, postPedido(alface, 1, horario, data.toString(), outro).getStatusCode());
-    }
-
-    private ResponseEntity<Map> postPedido(long produto, int quantidade, Long horario, String data, long comprador) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("produtoId", produto);
-        request.put("quantidade", quantidade);
-        request.put("horarioRetiradaId", horario);
-        request.put("dataRetirada", data);
-        request.put("compradorId", comprador);
-        return restTemplate.postForEntity("/api/pedidos", request, Map.class);
-    }
-
-    private int disponivel(long lote) {
-        return db.queryForObject("SELECT quantidade_disponivel FROM lote WHERE id = ?", Integer.class, lote);
-    }
-
-    private int contar(String sql, Object parametro) {
-        return db.queryForObject(sql, Integer.class, parametro);
+        assertEquals(HttpStatus.OK, resposta.getStatusCode());
+        assertEquals(5, ((Number) resposta.getBody().get("capacidade_atendimento")).intValue());
     }
 }

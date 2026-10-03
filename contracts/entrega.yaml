@@ -1,0 +1,385 @@
+openapi: 3.0.3
+info:
+  title: Feira Livre — serviço Entrega
+  version: 1.0.0
+  description: |
+    Dono do ponto de encontro, das janelas de retirada, da capacidade de
+    atendimento e da reserva de atendimento por pedido.
+    Rotas /api/** atravessam o gateway. Rotas /interno/** só são alcançadas
+    pelo núcleo, pela rede interna do Compose.
+servers:
+  - url: http://localhost:8083
+paths:
+  /api/retiradas/locais:
+    get:
+      operationId: listarLocais
+      parameters:
+        - $ref: '#/components/parameters/VendedorObrigatorio'
+      responses:
+        '200':
+          description: Locais do produtor.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocalRetirada'
+    post:
+      operationId: criarLocal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalEntrada'
+      responses:
+        '200':
+          description: Local criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalRetirada'
+        '400':
+          $ref: '#/components/responses/Erro'
+  /api/retiradas/horarios:
+    get:
+      operationId: listarJanelas
+      parameters:
+        - $ref: '#/components/parameters/VendedorObrigatorio'
+      responses:
+        '200':
+          description: Janelas do produtor com nome e endereço do local.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Janela'
+    post:
+      operationId: criarJanela
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JanelaEntrada'
+      responses:
+        '200':
+          description: Janela criada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Janela'
+        '400':
+          $ref: '#/components/responses/Erro'
+        '404':
+          $ref: '#/components/responses/Erro'
+  /api/retiradas/horarios/{horarioId}:
+    patch:
+      operationId: atualizarCapacidade
+      parameters:
+        - name: horarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapacidadeEntrada'
+      responses:
+        '200':
+          description: Janela com a capacidade nova.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Janela'
+        '400':
+          $ref: '#/components/responses/Erro'
+        '404':
+          $ref: '#/components/responses/Erro'
+  /api/retiradas/ocorrencias:
+    get:
+      operationId: listarOcorrencias
+      summary: Ocorrências das janelas nos próximos 28 dias, com vagas
+      parameters:
+        - $ref: '#/components/parameters/VendedorObrigatorio'
+        - name: compradorId
+          in: query
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Ocorrências.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ocorrencia'
+  /api/retiradas/reservas:
+    get:
+      operationId: listarReservasDosPedidos
+      summary: Reserva mais recente de cada pedido, ativa ou liberada
+      parameters:
+        - name: pedidoIds
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+      responses:
+        '200':
+          description: Reservas; lista vazia sem pedidoIds.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReservaDeAtendimento'
+  /interno/atendimentos/disponibilidade:
+    get:
+      operationId: verificarDisponibilidade
+      summary: Roda as mesmas validações da reserva, sem reservar
+      parameters:
+        - name: horarioId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: data
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: compradorId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: vendedorId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Há vaga para o comprador.
+        '400':
+          $ref: '#/components/responses/Erro'
+        '404':
+          $ref: '#/components/responses/Erro'
+        '409':
+          $ref: '#/components/responses/Erro'
+  /interno/atendimentos:
+    post:
+      operationId: reservarAtendimento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaDeAtendimentoEntrada'
+      responses:
+        '201':
+          description: Atendimento reservado, sem corpo.
+        '400':
+          $ref: '#/components/responses/Erro'
+        '404':
+          $ref: '#/components/responses/Erro'
+        '409':
+          $ref: '#/components/responses/Erro'
+  /interno/atendimentos/{pedidoId}:
+    delete:
+      operationId: liberarAtendimento
+      summary: Libera a reserva ativa do pedido; repetir não tem efeito
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Reserva liberada, ou nada a liberar.
+components:
+  parameters:
+    VendedorObrigatorio:
+      name: vendedorId
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+  responses:
+    Erro:
+      description: Erro no formato padrão do Spring.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+  schemas:
+    Erro:
+      type: object
+      required: [status, message]
+      properties:
+        timestamp:
+          type: string
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+    LocalRetirada:
+      type: object
+      required: [id, usuario_id, nome, endereco]
+      properties:
+        id:
+          type: integer
+          format: int64
+        usuario_id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        endereco:
+          type: string
+    LocalEntrada:
+      description: Sem campos obrigatórios no contrato — o serviço valida e responde 400.
+      type: object
+      properties:
+        vendedorId:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        endereco:
+          type: string
+    Janela:
+      type: object
+      required: [id, local_retirada_id, dia_semana, hora_inicio, hora_fim, capacidade_atendimento]
+      properties:
+        id:
+          type: integer
+          format: int64
+        local_retirada_id:
+          type: integer
+          format: int64
+        dia_semana:
+          type: integer
+        hora_inicio:
+          type: string
+        hora_fim:
+          type: string
+        capacidade_atendimento:
+          type: integer
+        usuario_id:
+          type: integer
+          format: int64
+        local_nome:
+          type: string
+        local_endereco:
+          type: string
+    JanelaEntrada:
+      description: Sem campos obrigatórios no contrato — o serviço valida e responde 400.
+      type: object
+      properties:
+        localId:
+          type: integer
+          format: int64
+        diaSemana:
+          type: integer
+        horaInicio:
+          type: string
+        horaFim:
+          type: string
+        capacidadeAtendimento:
+          type: integer
+    CapacidadeEntrada:
+      type: object
+      properties:
+        capacidadeAtendimento:
+          type: integer
+    Ocorrencia:
+      type: object
+      required: [horarioId, data, diaSemana, horaInicio, horaFim, capacidade, ocupadas, vagas, compradorJaReservado]
+      properties:
+        horarioId:
+          type: integer
+          format: int64
+        localNome:
+          type: string
+        localEndereco:
+          type: string
+        data:
+          type: string
+          format: date
+        diaSemana:
+          type: integer
+        horaInicio:
+          type: string
+        horaFim:
+          type: string
+        capacidade:
+          type: integer
+        ocupadas:
+          type: integer
+        vagas:
+          type: integer
+        compradorJaReservado:
+          type: boolean
+    ReservaDeAtendimento:
+      type: object
+      required: [pedidoId, status, data, horaInicio, horaFim, localNome, localEndereco]
+      properties:
+        pedidoId:
+          type: integer
+          format: int64
+        status:
+          type: string
+        data:
+          type: string
+          format: date
+        horaInicio:
+          type: string
+        horaFim:
+          type: string
+        localNome:
+          type: string
+        localEndereco:
+          type: string
+    ReservaDeAtendimentoEntrada:
+      type: object
+      additionalProperties: false
+      required: [pedidoId, compradorId, vendedorId, horarioId, dataRetirada]
+      properties:
+        pedidoId:
+          type: integer
+          format: int64
+        compradorId:
+          type: integer
+          format: int64
+        vendedorId:
+          type: integer
+          format: int64
+        horarioId:
+          type: integer
+          format: int64
+        dataRetirada:
+          type: string
+          format: date
