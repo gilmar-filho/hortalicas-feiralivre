@@ -26,7 +26,7 @@ public class CatalogoIntegrationTest {
 
     @Test
     public void estoqueDoCatalogoDeveSomarApenasOsLotesAindaValidos() {
-        long vendedorId = TestData.usuario(db, "Vendedor catálogo", TestData.email("vendedor.catalogo"), "123456");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Abobrinha do catálogo", 5.00);
         TestData.lote(db, produtoId, 5, 10);
         TestData.lote(db, produtoId, 20, 15);
@@ -40,7 +40,7 @@ public class CatalogoIntegrationTest {
 
     @Test
     public void validadeExibidaDeveSerADoLoteQueVencePrimeiro() {
-        long vendedorId = TestData.usuario(db, "Vendedor validade cat", TestData.email("vendedor.validadecat"), "123456");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Pimentão do catálogo", 6.00);
         TestData.lote(db, produtoId, 18, 10);
         long loteQueVencePrimeiro = TestData.lote(db, produtoId, 4, 10);
@@ -55,7 +55,7 @@ public class CatalogoIntegrationTest {
 
     @Test
     public void produtoDesativadoNaoDeveAparecerNoCatalogo() {
-        long vendedorId = TestData.usuario(db, "Vendedor inativo cat", TestData.email("vendedor.inativocat"), "123456");
+        long vendedorId = TestData.id();
         long ativo = TestData.produto(db, vendedorId, "Quiabo visível", 5.00);
         long inativo = TestData.produto(db, vendedorId, "Quiabo escondido", 5.00, false);
         TestData.lote(db, ativo, 7, 10);
@@ -69,7 +69,7 @@ public class CatalogoIntegrationTest {
 
     @Test
     public void buscaDeveFiltrarPeloNomeIgnorandoMaiusculas() {
-        long vendedorId = TestData.usuario(db, "Vendedor busca", TestData.email("vendedor.busca"), "123456");
+        long vendedorId = TestData.id();
         long encontrado = TestData.produto(db, vendedorId, "Mandioquinha salsa", 9.00);
         long ignorado = TestData.produto(db, vendedorId, "Repolho roxo", 4.00);
         TestData.lote(db, encontrado, 7, 10);
@@ -83,7 +83,7 @@ public class CatalogoIntegrationTest {
 
     @Test
     public void validadeMaximaDeveIgnorarLotesVencidosEZerados() {
-        long vendedorId = TestData.usuario(db, "Vendedor validade máx", TestData.email("vendedor.validademax"), "123456");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Vagem do catálogo", 5.00);
         TestData.lote(db, produtoId, 5, 10);
         long loteMaisLongoComSaldo = TestData.lote(db, produtoId, 12, 3);

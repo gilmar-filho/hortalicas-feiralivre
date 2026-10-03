@@ -1,10 +1,10 @@
 # Java / Maven
-backend/target/
+**/target/
 *.class
 
 # Banco SQLite local e arquivos auxiliares
-backend/data/*.db
-backend/data/*.db-*
+**/data/*.db
+**/data/*.db-*
 *.sqlite
 *.sqlite3
 

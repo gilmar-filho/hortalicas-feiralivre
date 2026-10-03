@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,7 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import br.ufla.feiralivre.TestData;
-import br.ufla.feiralivre.entrega.service.EntregaService;
+import br.ufla.feiralivre.contrato.ValidacaoDeContrato;
 
 /**
  * A pergunta que o produto existe para responder: dado um pedido, de qual
@@ -31,14 +32,18 @@ public class RastreabilidadeIntegrationTest {
     @Autowired
     private JdbcTemplate db;
 
+    @BeforeEach
+    public void validarContrato() {
+        ValidacaoDeContrato.instalar(restTemplate, "../../contracts/producao.yaml");
+    }
+
     @Test
     public void devePermitirChegarDoPedidoAteAOrigemEValidadeDoLote() {
-        long vendedorId = TestData.usuario(db, "Vendedor rastreio", TestData.email("vendedor.rastreio"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de rastreio");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Tomate (teste de rastreio)", 7.90);
         long loteId = TestData.lote(db, produtoId, 5, 25, "Sítio Boa Terra — talhão 3");
 
-        long pedidoId = criarPedido(produtoId, 3, localId);
+        long pedidoId = criarPedido(produtoId, 3, TestData.hoje().plusDays(1));
 
         Map<String, Object> rastreio = db.queryForMap(
             "SELECT l.id lote_id, l.origem, l.data_validade, re.quantidade "
@@ -58,13 +63,12 @@ public class RastreabilidadeIntegrationTest {
 
     @Test
     public void pedidoAtendidoPorDoisLotesDeveRastrearOsDois() {
-        long vendedorId = TestData.usuario(db, "Vendedor rastreio 2", TestData.email("vendedor.rastreio2"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de rastreio duplo");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Cebolinha (rastreio duplo)", 2.50);
         TestData.lote(db, produtoId, 3, 4, "Horta da Serra");
         TestData.lote(db, produtoId, 9, 20, "Sítio Boa Terra");
 
-        long pedidoId = criarPedido(produtoId, 7, localId);
+        long pedidoId = criarPedido(produtoId, 7, TestData.hoje().plusDays(1));
 
         List<Map<String, Object>> origens = db.queryForList(
             "SELECT l.origem, re.quantidade FROM reserva_estoque re "
@@ -77,19 +81,20 @@ public class RastreabilidadeIntegrationTest {
         assertEquals(3, ((Number) origens.get(1).get("quantidade")).intValue());
     }
 
-    private long criarPedido(long produtoId, int quantidade, long localId) {
-        LocalDate dataRetirada = EntregaService.hoje().plusDays(1);
-        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
+    private long criarPedido(long produtoId, int quantidade, LocalDate dataRetirada) {
+        ResponseEntity<Map> response = postPedido(produtoId, quantidade, dataRetirada);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+        return ((Number) response.getBody().get("pedidoId")).longValue();
+    }
+
+    private ResponseEntity<Map> postPedido(long produtoId, int quantidade, LocalDate dataRetirada) {
         Map<String, Object> request = Map.of(
+            "pedidoId", TestData.id(),
             "produtoId", produtoId,
             "quantidade", quantidade,
-            "horarioRetiradaId", horarioId,
-            "dataRetirada", dataRetirada.toString(),
-            "compradorId", 1
+            "dataRetirada", dataRetirada.toString()
         );
-        ResponseEntity<Map> response = restTemplate.postForEntity("/api/pedidos", request, Map.class);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        return ((Number) response.getBody().get("id")).longValue();
+        return restTemplate.postForEntity("/interno/reservas-estoque", request, Map.class);
     }
 }

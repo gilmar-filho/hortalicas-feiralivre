@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,7 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import br.ufla.feiralivre.TestData;
-import br.ufla.feiralivre.entrega.service.EntregaService;
+import br.ufla.feiralivre.contrato.ValidacaoDeContrato;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class FefoIntegrationTest {
@@ -27,10 +28,14 @@ public class FefoIntegrationTest {
     @Autowired
     private JdbcTemplate db;
 
+    @BeforeEach
+    public void validarContrato() {
+        ValidacaoDeContrato.instalar(restTemplate, "../../contracts/producao.yaml");
+    }
+
     @Test
     public void deveReservarPrimeiroOLoteMaisProximoDoVencimento() {
-        long vendedorId = TestData.usuario(db, "Vendedor fefo", TestData.email("vendedor.fefo"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste FEFO");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Rúcula (teste FEFO)", 3.00);
 
         // O lote que vence mais tarde é cadastrado primeiro, e por isso recebe
@@ -39,7 +44,7 @@ public class FefoIntegrationTest {
         long loteValidadeLonga = TestData.lote(db, produtoId, 10, 50);
         long loteValidadeCurta = TestData.lote(db, produtoId, 3, 50);
 
-        long pedidoId = criarPedido(produtoId, 5, localId, EntregaService.hoje().plusDays(1));
+        long pedidoId = criarPedido(produtoId, 5, TestData.hoje().plusDays(1));
 
         long loteReservado = db.queryForObject(
             "SELECT lote_id FROM reserva_estoque WHERE pedido_id = ?", Long.class, pedidoId);
@@ -52,8 +57,7 @@ public class FefoIntegrationTest {
 
     @Test
     public void deveTransbordarParaOProximoLoteRespeitandoAOrdemDeValidade() {
-        long vendedorId = TestData.usuario(db, "Vendedor transbordo", TestData.email("vendedor.transbordo"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de transbordo");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Agrião (teste de transbordo)", 3.50);
 
         long loteLonge = TestData.lote(db, produtoId, 12, 50);
@@ -62,7 +66,7 @@ public class FefoIntegrationTest {
 
         // 12 unidades não cabem no lote que vence primeiro: 5 saem dele,
         // 7 do seguinte na ordem de validade, e o mais distante fica intacto.
-        long pedidoId = criarPedido(produtoId, 12, localId, EntregaService.hoje().plusDays(1));
+        long pedidoId = criarPedido(produtoId, 12, TestData.hoje().plusDays(1));
 
         assertEquals(0, disponivel(lotePerto), "O lote que vence primeiro é esvaziado antes de usar outro");
         assertEquals(3, disponivel(loteMeio), "O restante sai do segundo lote na ordem de validade");
@@ -80,15 +84,14 @@ public class FefoIntegrationTest {
 
     @Test
     public void naoDeveAlocarLoteQueVenceAntesDaDataDeRetirada() {
-        long vendedorId = TestData.usuario(db, "Vendedor validade", TestData.email("vendedor.validade"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de validade");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Almeirão (teste de validade)", 4.00);
 
         long loteQueVenceAntes = TestData.lote(db, produtoId, 2, 40);
         long loteAindaValido = TestData.lote(db, produtoId, 15, 40);
 
         // A retirada é daqui a 8 dias: o lote que vence em 2 não chega lá.
-        long pedidoId = criarPedido(produtoId, 3, localId, EntregaService.hoje().plusDays(8));
+        long pedidoId = criarPedido(produtoId, 3, TestData.hoje().plusDays(8));
 
         long loteReservado = db.queryForObject(
             "SELECT lote_id FROM reserva_estoque WHERE pedido_id = ?", Long.class, pedidoId);
@@ -99,34 +102,31 @@ public class FefoIntegrationTest {
 
     @Test
     public void deveRecusarPedidoQuandoTodoOEstoqueVenceAntesDaRetirada() {
-        long vendedorId = TestData.usuario(db, "Vendedor vencido", TestData.email("vendedor.vencido"), "123456");
-        long localId = TestData.localRetirada(db, vendedorId, "Ponto do teste de estoque vencido");
+        long vendedorId = TestData.id();
         long produtoId = TestData.produto(db, vendedorId, "Salsa (estoque vencido)", 2.00);
         TestData.lote(db, produtoId, 2, 40);
 
-        ResponseEntity<Map> response = postPedido(produtoId, 3, localId, EntregaService.hoje().plusDays(10));
+        ResponseEntity<Map> response = postPedido(produtoId, 3, TestData.hoje().plusDays(10));
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode(),
             "Estoque que não chega válido na data da retirada não conta como disponível");
     }
 
-    private long criarPedido(long produtoId, int quantidade, long localId, LocalDate dataRetirada) {
-        ResponseEntity<Map> response = postPedido(produtoId, quantidade, localId, dataRetirada);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
+    private long criarPedido(long produtoId, int quantidade, LocalDate dataRetirada) {
+        ResponseEntity<Map> response = postPedido(produtoId, quantidade, dataRetirada);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertNotNull(response.getBody());
-        return ((Number) response.getBody().get("id")).longValue();
+        return ((Number) response.getBody().get("pedidoId")).longValue();
     }
 
-    private ResponseEntity<Map> postPedido(long produtoId, int quantidade, long localId, LocalDate dataRetirada) {
-        long horarioId = TestData.janela(db, localId, dataRetirada, 50);
+    private ResponseEntity<Map> postPedido(long produtoId, int quantidade, LocalDate dataRetirada) {
         Map<String, Object> request = Map.of(
+            "pedidoId", TestData.id(),
             "produtoId", produtoId,
             "quantidade", quantidade,
-            "horarioRetiradaId", horarioId,
-            "dataRetirada", dataRetirada.toString(),
-            "compradorId", 1
+            "dataRetirada", dataRetirada.toString()
         );
-        return restTemplate.postForEntity("/api/pedidos", request, Map.class);
+        return restTemplate.postForEntity("/interno/reservas-estoque", request, Map.class);
     }
 
     private int disponivel(long loteId) {

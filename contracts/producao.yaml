@@ -1,0 +1,467 @@
+openapi: 3.0.3
+info:
+  title: Feira Livre — serviço Produção
+  version: 1.0.0
+  description: |
+    Dono de produto, lote, validade e reserva de estoque.
+    Rotas /api/** atravessam o gateway. Rotas /interno/** só são alcançadas
+    pelo núcleo, pela rede interna do Compose.
+servers:
+  - url: http://localhost:8082
+paths:
+  /api/produtos:
+    get:
+      operationId: listarCatalogo
+      summary: Produtos ativos com estoque e validade dos lotes válidos
+      parameters:
+        - name: busca
+          in: query
+          schema:
+            type: string
+        - name: usuarioId
+          in: query
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Catálogo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProdutoCatalogo'
+    post:
+      operationId: criarProduto
+      summary: Cria o produto e o primeiro lote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProdutoEntrada'
+      responses:
+        '200':
+          description: Produto criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Produto'
+        '400':
+          $ref: '#/components/responses/Erro'
+  /api/produtos/reservas:
+    get:
+      operationId: listarReservasDosPedidos
+      summary: Lotes reservados por pedido, ativos e devolvidos
+      parameters:
+        - name: pedidoIds
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+      responses:
+        '200':
+          description: Reservas; lista vazia sem pedidoIds.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReservaDeEstoque'
+  /api/produtos/{produtoId}:
+    put:
+      operationId: editarProduto
+      summary: Edita o produto e cria ou atualiza o lote informado
+      parameters:
+        - $ref: '#/components/parameters/ProdutoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProdutoEntrada'
+      responses:
+        '200':
+          description: Produto editado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Produto'
+        '400':
+          $ref: '#/components/responses/Erro'
+  /api/produtos/{produtoId}/desativar:
+    patch:
+      operationId: desativarProduto
+      parameters:
+        - $ref: '#/components/parameters/ProdutoId'
+      responses:
+        '200':
+          description: Produto desativado, sem corpo.
+  /api/produtos/{produtoId}/lotes:
+    post:
+      operationId: criarLote
+      parameters:
+        - $ref: '#/components/parameters/ProdutoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoteEntrada'
+      responses:
+        '200':
+          description: Lote criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lote'
+        '400':
+          $ref: '#/components/responses/Erro'
+  /api/produtos/{produtoId}/lotes/{loteId}:
+    put:
+      operationId: atualizarLote
+      parameters:
+        - $ref: '#/components/parameters/ProdutoId'
+        - name: loteId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoteEntrada'
+      responses:
+        '200':
+          description: Contadores do lote depois da atualização.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContadoresDoLote'
+        '400':
+          $ref: '#/components/responses/Erro'
+  /interno/produtos/{id}:
+    get:
+      operationId: resumoDoProduto
+      summary: Preço, vendedor e nome de um produto ativo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Produto ativo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProdutoResumo'
+        '404':
+          $ref: '#/components/responses/Erro'
+  /interno/reservas-estoque:
+    post:
+      operationId: reservarEstoque
+      summary: Aloca a quantidade por FEFO e amarra o pedido aos lotes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservaDeEstoqueEntrada'
+      responses:
+        '201':
+          description: Reserva feita.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDeEstoqueCriada'
+        '404':
+          $ref: '#/components/responses/Erro'
+        '409':
+          $ref: '#/components/responses/Erro'
+  /interno/reservas-estoque/{pedidoId}:
+    delete:
+      operationId: devolverEstoque
+      summary: Devolve ao lote toda reserva ativa do pedido; repetir não tem efeito
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Reservas devolvidas, ou nada a devolver.
+components:
+  parameters:
+    ProdutoId:
+      name: produtoId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+  responses:
+    Erro:
+      description: Erro no formato padrão do Spring.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+  schemas:
+    Erro:
+      type: object
+      required: [status, message]
+      properties:
+        timestamp:
+          type: string
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
+    Produto:
+      type: object
+      required: [id, usuario_id, nome, categoria, preco, ativo, data_cadastro]
+      properties:
+        id:
+          type: integer
+          format: int64
+        usuario_id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        categoria:
+          type: string
+        descricao:
+          type: string
+          nullable: true
+        foto:
+          type: string
+          nullable: true
+        preco:
+          type: number
+        ativo:
+          type: integer
+        data_cadastro:
+          type: string
+    ProdutoCatalogo:
+      type: object
+      required: [id, usuario_id, nome, preco, ativo, estoque]
+      properties:
+        id:
+          type: integer
+          format: int64
+        usuario_id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        categoria:
+          type: string
+        descricao:
+          type: string
+          nullable: true
+        foto:
+          type: string
+          nullable: true
+        preco:
+          type: number
+        ativo:
+          type: integer
+        data_cadastro:
+          type: string
+        estoque:
+          type: integer
+        validade:
+          type: string
+          nullable: true
+        validade_maxima:
+          type: string
+          nullable: true
+        lote_id:
+          type: integer
+          format: int64
+          nullable: true
+        quantidade_disponivel:
+          type: integer
+          nullable: true
+        data_validade:
+          type: string
+          nullable: true
+    ProdutoEntrada:
+      description: Sem campos obrigatórios no contrato — o serviço valida e responde 400.
+      type: object
+      properties:
+        usuarioId:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        categoria:
+          type: string
+        descricao:
+          type: string
+          nullable: true
+        foto:
+          type: string
+          nullable: true
+        preco:
+          type: number
+        ativo:
+          type: integer
+        dataCadastro:
+          type: string
+        dataValidade:
+          type: string
+        quantidadeEstoque:
+          type: integer
+        loteId:
+          description: Id do lote a atualizar, ou texto vazio para criar um lote novo.
+    LoteEntrada:
+      description: Sem campos obrigatórios no contrato — o serviço valida e responde 400.
+      type: object
+      properties:
+        dataValidade:
+          type: string
+          nullable: true
+        quantidadeEstoque:
+          type: integer
+        quantidade:
+          type: integer
+        origem:
+          type: string
+        dataProducao:
+          type: string
+        dataCadastro:
+          type: string
+    Lote:
+      type: object
+      required: [id, produto_id, data_producao, data_validade, quantidade_total, quantidade_disponivel, quantidade_reservada, quantidade_vendida]
+      properties:
+        id:
+          type: integer
+          format: int64
+        produto_id:
+          type: integer
+          format: int64
+        origem:
+          type: string
+          nullable: true
+        data_producao:
+          type: string
+        data_validade:
+          type: string
+        quantidade_total:
+          type: integer
+        quantidade_disponivel:
+          type: integer
+        quantidade_reservada:
+          type: integer
+        quantidade_vendida:
+          type: integer
+    ContadoresDoLote:
+      type: object
+      required: [quantidade_reservada, quantidade_vendida]
+      properties:
+        quantidade_reservada:
+          type: integer
+        quantidade_vendida:
+          type: integer
+    ProdutoResumo:
+      type: object
+      additionalProperties: false
+      required: [id, vendedorId, nome, preco]
+      properties:
+        id:
+          type: integer
+          format: int64
+        vendedorId:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        preco:
+          type: number
+    ReservaDeEstoqueEntrada:
+      type: object
+      additionalProperties: false
+      required: [pedidoId, produtoId, quantidade, dataRetirada]
+      properties:
+        pedidoId:
+          type: integer
+          format: int64
+        produtoId:
+          type: integer
+          format: int64
+        quantidade:
+          type: integer
+          minimum: 1
+        dataRetirada:
+          type: string
+          format: date
+    ReservaDeEstoqueCriada:
+      type: object
+      additionalProperties: false
+      required: [pedidoId, lotes]
+      properties:
+        pedidoId:
+          type: integer
+          format: int64
+        lotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoteAlocado'
+    LoteAlocado:
+      type: object
+      additionalProperties: false
+      required: [loteId, quantidade, origem, dataValidade]
+      properties:
+        loteId:
+          type: integer
+          format: int64
+        quantidade:
+          type: integer
+        origem:
+          type: string
+          nullable: true
+        dataValidade:
+          type: string
+          format: date
+    ReservaDeEstoque:
+      type: object
+      additionalProperties: false
+      required: [pedidoId, loteId, quantidade, origem, dataValidade, status]
+      properties:
+        pedidoId:
+          type: integer
+          format: int64
+        loteId:
+          type: integer
+          format: int64
+        quantidade:
+          type: integer
+        origem:
+          type: string
+          nullable: true
+        dataValidade:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ATIVA, DEVOLVIDA]
