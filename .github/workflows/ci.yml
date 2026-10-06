@@ -68,3 +68,37 @@ jobs:
           if [ -n "$files" ]; then
             npx --yes markdownlint-cli2 $files
           fi
+
+  sonar:
+    name: Qualidade (SonarCloud)
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      # Enquanto o segredo nao existir, o job termina VERDE sem fazer nada.
+      # Sem isto, no dia em que este arquivo entrasse o CI ficaria vermelho em
+      # todo PR ate alguem criar o token -- e "main sempre verde" iria junto.
+      - name: Sem SONAR_TOKEN ainda
+        if: env.SONAR_TOKEN == ''
+        run: echo "SONAR_TOKEN nao configurado. Analise pulada de proposito."
+
+      - uses: actions/checkout@v4
+        if: env.SONAR_TOKEN != ''
+        with:
+          # O Sonar usa o historico para saber o que e "codigo novo".
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        if: env.SONAR_TOKEN != ''
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Cache do Sonar
+        if: env.SONAR_TOKEN != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}
+      - name: mvn verify + analise
+        if: env.SONAR_TOKEN != ''
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar

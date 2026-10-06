@@ -1,0 +1,28 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>br.ufla</groupId><artifactId>feira-livre</artifactId><version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>Feira Livre</name>
+
+  <!--
+    Este pom NAO e pai de ninguem: os tres servicos continuam filhos do
+    spring-boot-starter-parent, e nenhum deles muda por causa daqui. Ele so
+    AGRUPA os tres para que o SonarCloud enxergue um projeto so, em vez de
+    tres analises soltas que nao conversam.
+  -->
+  <modules>
+    <module>servicos/nucleo</module>
+    <module>servicos/producao</module>
+    <module>servicos/entrega</module>
+  </modules>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- TROCAR pelos dois valores que o SonarCloud mostra ao importar o repo -->
+    <sonar.organization>COLOQUE-A-ORGANIZACAO-AQUI</sonar.organization>
+    <sonar.projectKey>COLOQUE-A-CHAVE-DO-PROJETO-AQUI</sonar.projectKey>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+    <!-- O e2e sobe o Compose inteiro; fora da analise de codigo. -->
+    <sonar.exclusions>e2e/**,frontend/**</sonar.exclusions>
+  </properties>
+</project>
