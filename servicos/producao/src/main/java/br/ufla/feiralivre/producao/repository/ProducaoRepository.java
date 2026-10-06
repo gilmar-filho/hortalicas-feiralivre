@@ -34,6 +34,16 @@ public class ProducaoRepository {
     public void reservar(long loteId, long pedidoId, int quantidade) { db.update("UPDATE lote SET quantidade_disponivel=quantidade_disponivel-?, quantidade_reservada=quantidade_reservada+? WHERE id=?", quantidade, quantidade, loteId); db.update("INSERT INTO reserva_estoque (pedido_id,lote_id,quantidade) VALUES (?,?,?)", pedidoId, loteId, quantidade); }
     public List<Map<String, Object>> reservasAtivas(long pedidoId) { return db.queryForList("SELECT id, lote_id, quantidade FROM reserva_estoque WHERE pedido_id=? AND status='ATIVA'", pedidoId); }
     public void devolver(long reservaId, long loteId, int quantidade) { db.update("UPDATE lote SET quantidade_disponivel=quantidade_disponivel+?, quantidade_reservada=quantidade_reservada-? WHERE id=?", quantidade, quantidade, loteId); db.update("UPDATE reserva_estoque SET status='DEVOLVIDA' WHERE id=?", reservaId); }
+    public void vender(long reservaId, long loteId, int quantidade) { db.update("UPDATE lote SET quantidade_reservada=quantidade_reservada-?, quantidade_vendida=quantidade_vendida+? WHERE id=?", quantidade, quantidade, loteId); db.update("UPDATE reserva_estoque SET status='VENDIDA' WHERE id=?", reservaId); }
+    public int registrarProcessamento(String eventoId, String tipo) { return db.update("INSERT OR IGNORE INTO evento_processado (evento_id,tipo) VALUES (?,?)", eventoId, tipo); }
+    public int venderReservas(long pedidoId) {
+        int confirmadas = 0;
+        for (Map<String, Object> reserva : reservasAtivas(pedidoId)) {
+            vender(((Number) reserva.get("id")).longValue(), ((Number) reserva.get("lote_id")).longValue(), ((Number) reserva.get("quantidade")).intValue());
+            confirmadas++;
+        }
+        return confirmadas;
+    }
     public List<Map<String, Object>> reservasDosPedidos(List<Long> pedidoIds) {
         String marcadores = String.join(",", Collections.nCopies(pedidoIds.size(), "?"));
         return db.queryForList("SELECT re.pedido_id pedidoId, re.lote_id loteId, re.quantidade, l.origem, l.data_validade dataValidade, re.status FROM reserva_estoque re JOIN lote l ON l.id=re.lote_id WHERE re.pedido_id IN (" + marcadores + ") ORDER BY re.pedido_id, re.id", pedidoIds.toArray());
