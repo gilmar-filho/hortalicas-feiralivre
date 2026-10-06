@@ -67,7 +67,8 @@ Entrega](docs/adr/0003-extracao-de-producao-e-entrega.md) ·
 [0005 — Contratos OpenAPI contract-first](docs/adr/0005-contratos-openapi-contract-first.md) ·
 [0006 — Compose e nginx como API Gateway](docs/adr/0006-compose-e-nginx-como-api-gateway.md) ·
 [0007 — Testes depois da extração](docs/adr/0007-testes-depois-da-extracao.md) ·
-[0008 — Mensageria com RabbitMQ e outbox](docs/adr/0008-mensageria-rabbitmq-e-outbox.md)
+[0008 — Mensageria com RabbitMQ e outbox](docs/adr/0008-mensageria-rabbitmq-e-outbox.md) ·
+[0009 — Qualidade contínua com SonarCloud](docs/adr/0009-qualidade-continua-com-sonarcloud.md)
 
 ## ▶️ Como Utilizar
 
