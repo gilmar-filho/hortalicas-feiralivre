@@ -23,10 +23,10 @@ Todas as decisões técnicas com impacto entre os contextos do sistema são docu
 O projeto adota práticas de **CI/CD em monorepo**, garantindo que o código na branch `main` esteja sempre testado e funcional.
 
 - **GitHub Actions:** CI automatizado (Build, testes por serviço, ponta a ponta e Lint).
-- **Docker & Docker Compose:** quatro containers — gateway nginx, núcleo, Produção e Entrega — sobem com um único comando.
+- **Docker & Docker Compose:** cinco containers — gateway nginx, núcleo, Produção, Entrega e RabbitMQ — sobem com um único comando.
 - **Banco de dados:** um arquivo SQLite por serviço (*Database per Service*).
 - **Contratos:** OpenAPI 3.0.3 contract-first em [`contracts/`](contracts/), testados nos dois lados.
-- **Mensageria:** a definir (D4).
+- **Mensageria:** RabbitMQ com outbox transacional e consumidor idempotente (D4).
 
 ## 🏗️ Arquitetura
 
@@ -40,15 +40,23 @@ navegador ──8080──▶ gateway (nginx + build React) │
                │producao │  │entrega  │  │nucleo   │
                │  :8082  │  │  :8083  │  │  :8081  │
                └────┬────┘  └────┬────┘  └──┬───┬──┘
-                    │            │   /interno│   │/interno
-                    │            ◀───────────┘   │
-                    ◀────────────────────────────┘
+                    │            │  /interno│   │/interno
+                    │            ◀──────────┘   │
+                    │            │ outbox       │
+                    │  ┌─────────▼─────────┐    │
+             evento ◀──│     rabbitmq      │    │
+                    │  └───────────────────┘    │
+                    ◀───────────────────────────┘
                producao.db   entrega.db      nucleo.db
 ```
 
 O núcleo reúne Pedido, Faturamento e Usuário, e chama Produção e
 Entrega por REST síncrono, direto pelo nome do serviço na rede do
 Compose. Os endpoints `/interno/**` não passam pelo gateway.
+
+A confirmação da retirada grava o evento no outbox na mesma transação
+da reserva e o RabbitMQ entrega a Produção, que baixa o estoque de
+forma idempotente — o caminho `outbox → broker → consumidor` é o D4.
 
 📖 **Contratos dos serviços extraídos:**
 [Produção](contracts/producao.yaml) · [Entrega](contracts/entrega.yaml)
@@ -58,7 +66,8 @@ Entrega](docs/adr/0003-extracao-de-producao-e-entrega.md) ·
 [0004 — Banco por serviço com SQLite](docs/adr/0004-banco-por-servico-com-sqlite.md) ·
 [0005 — Contratos OpenAPI contract-first](docs/adr/0005-contratos-openapi-contract-first.md) ·
 [0006 — Compose e nginx como API Gateway](docs/adr/0006-compose-e-nginx-como-api-gateway.md) ·
-[0007 — Testes depois da extração](docs/adr/0007-testes-depois-da-extracao.md)
+[0007 — Testes depois da extração](docs/adr/0007-testes-depois-da-extracao.md) ·
+[0008 — Mensageria com RabbitMQ e outbox](docs/adr/0008-mensageria-rabbitmq-e-outbox.md)
 
 ## ▶️ Como Utilizar
 
