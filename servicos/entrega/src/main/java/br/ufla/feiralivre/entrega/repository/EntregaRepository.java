@@ -59,6 +59,30 @@ public class EntregaRepository {
         db.update("UPDATE reserva_atendimento SET status='LIBERADA' WHERE pedido_id=? AND status='ATIVA'", pedidoId);
     }
 
+    public List<Map<String, Object>> ultimaReserva(long pedidoId) {
+        return db.queryForList("SELECT * FROM reserva_atendimento WHERE pedido_id=? ORDER BY id DESC LIMIT 1", pedidoId);
+    }
+
+    public int confirmarReserva(long pedidoId) {
+        return db.update("UPDATE reserva_atendimento SET status='RETIRADA' WHERE pedido_id=? AND status='ATIVA'", pedidoId);
+    }
+
+    public void inserirOutbox(String eventoId, String tipo, long agregadoId, String payload) {
+        db.update("INSERT INTO outbox_evento (evento_id,tipo,agregado_id,payload) VALUES (?,?,?,?)", eventoId, tipo, agregadoId, payload);
+    }
+
+    public List<Map<String, Object>> outboxPendente(int limite) {
+        return db.queryForList("SELECT evento_id, payload FROM outbox_evento WHERE status='PENDENTE' ORDER BY id LIMIT ?", limite);
+    }
+
+    public void marcarPublicado(String eventoId) {
+        db.update("UPDATE outbox_evento SET status='PUBLICADO', publicado_em=datetime('now'), ultimo_erro=NULL WHERE evento_id=?", eventoId);
+    }
+
+    public void registrarErroPublicacao(String eventoId, String erro) {
+        db.update("UPDATE outbox_evento SET tentativas=tentativas+1, ultimo_erro=? WHERE evento_id=?", erro, eventoId);
+    }
+
     public List<Map<String, Object>> reservasDosPedidos(List<Long> pedidoIds) {
         String marcadores = String.join(",", Collections.nCopies(pedidoIds.size(), "?"));
         return db.queryForList("SELECT r.pedido_id pedidoId, r.status, r.data_retirada data, h.hora_inicio horaInicio, h.hora_fim horaFim, l.nome localNome, l.endereco localEndereco FROM reserva_atendimento r JOIN horario_retirada h ON h.id=r.horario_retirada_id JOIN local_retirada l ON l.id=h.local_retirada_id WHERE r.id IN (SELECT MAX(id) FROM reserva_atendimento WHERE pedido_id IN (" + marcadores + ") GROUP BY pedido_id) ORDER BY r.pedido_id", pedidoIds.toArray());

@@ -1,5 +1,7 @@
 package br.ufla.feiralivre.entrega.service;
 
+import java.io.UncheckedIOException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -9,21 +11,27 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import br.ufla.feiralivre.entrega.repository.EntregaRepository;
 
 @Service
 public class EntregaService {
+    public static final String EVENTO_RETIRADA_CONFIRMADA = "RetiradaConfirmada";
     public static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
     public static final int HORIZONTE_DIAS = 28;
     private final EntregaRepository repository;
+    private final ObjectMapper json;
 
-    public EntregaService(EntregaRepository repository) { this.repository = repository; }
+    public EntregaService(EntregaRepository repository, ObjectMapper json) { this.repository = repository; this.json = json; }
 
     public static LocalDate hoje() { return LocalDate.now(FUSO); }
     public static int diaSemana(LocalDate data) { return data.getDayOfWeek().getValue() % 7; }
@@ -77,6 +85,41 @@ public class EntregaService {
     }
 
     public void liberarAtendimento(long pedidoId) { repository.liberar(pedidoId); }
+
+    /**
+     * Confirmar a retirada muda a reserva e grava o evento RetiradaConfirmada
+     * no outbox na mesma transação: ou as duas coisas acontecem, ou nenhuma.
+     * Repetir a confirmação não publica um segundo evento.
+     */
+    @Transactional
+    public Map<String, Object> confirmar(long pedidoId) {
+        List<Map<String, Object>> reservas = repository.ultimaReserva(pedidoId);
+        if (reservas.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Reserva de atendimento não encontrada");
+        Map<String, Object> reserva = reservas.get(0);
+        String status = String.valueOf(reserva.get("status"));
+        if ("LIBERADA".equals(status)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Reserva de atendimento foi liberada");
+        if ("ATIVA".equals(status)) {
+            String eventoId = UUID.randomUUID().toString();
+            repository.confirmarReserva(pedidoId);
+            repository.inserirOutbox(eventoId, EVENTO_RETIRADA_CONFIRMADA, pedidoId, evento(eventoId, reserva));
+        }
+        return repository.reservasDosPedidos(List.of(pedidoId)).get(0);
+    }
+
+    private String evento(String eventoId, Map<String, Object> reserva) {
+        Map<String, Object> dados = new LinkedHashMap<>();
+        dados.put("pedidoId", reserva.get("pedido_id"));
+        dados.put("compradorId", reserva.get("comprador_id"));
+        dados.put("horarioRetiradaId", reserva.get("horario_retirada_id"));
+        dados.put("dataRetirada", reserva.get("data_retirada"));
+        Map<String, Object> evento = new LinkedHashMap<>();
+        evento.put("eventoId", eventoId);
+        evento.put("tipo", EVENTO_RETIRADA_CONFIRMADA);
+        evento.put("ocorridoEm", Instant.now().toString());
+        evento.put("dados", dados);
+        try { return json.writeValueAsString(evento); }
+        catch (JsonProcessingException e) { throw new UncheckedIOException(e); }
+    }
 
     public List<Map<String, Object>> ocorrencias(long vendedorId, Long compradorId) {
         LocalDate hoje = hoje();

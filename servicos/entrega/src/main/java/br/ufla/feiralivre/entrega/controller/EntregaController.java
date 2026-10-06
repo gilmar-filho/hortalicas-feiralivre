@@ -41,4 +41,7 @@ public class EntregaController {
 
     @GetMapping("/reservas")
     public List<Map<String, Object>> reservas(@RequestParam(required = false) List<Long> pedidoIds) { return service.reservasDosPedidos(pedidoIds); }
+
+    @PostMapping("/reservas/{pedidoId}/confirmacao")
+    public Map<String, Object> confirmarRetirada(@PathVariable long pedidoId) { return service.confirmar(pedidoId); }
 }

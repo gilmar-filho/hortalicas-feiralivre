@@ -144,6 +144,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReservaDeAtendimento'
+  /api/retiradas/reservas/{pedidoId}/confirmacao:
+    post:
+      operationId: confirmarRetirada
+      summary: Produtor confirma a retirada; repetir nao publica novo evento
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Retirada confirmada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaDeAtendimento'
+        '404':
+          $ref: '#/components/responses/Erro'
+        '409':
+          $ref: '#/components/responses/Erro'
   /interno/atendimentos/disponibilidade:
     get:
       operationId: verificarDisponibilidade
