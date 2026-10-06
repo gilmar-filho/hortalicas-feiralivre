@@ -145,6 +145,28 @@ public class FluxoPontaAPontaTest {
     }
 
     @Test
+    @Order(7)
+    public void confirmacaoDaRetiradaDeveBaixarOEstoquePeloEvento() throws Exception {
+        Cenario c = cenario(30);
+        long pedido = pedir(c, c.produto(), 3, c.comprador()).corpo().get("id").asLong();
+        assertEquals("ATIVA", statusDaReservaDeEstoque(pedido));
+        assertEquals("ATIVA", statusDaRetirada(pedido));
+
+        Resposta confirmada = enviar("POST", "/api/retiradas/reservas/" + pedido + "/confirmacao", null);
+
+        assertEquals(200, confirmada.status());
+        assertEquals("RETIRADA", confirmada.corpo().get("status").asText());
+        aguardar(30, () -> "VENDIDA".equals(statusDaReservaDeEstoque(pedido)),
+            "a Produção consumir o evento RetiradaConfirmada no broker");
+
+        Resposta repetida = enviar("POST", "/api/retiradas/reservas/" + pedido + "/confirmacao", null);
+        assertEquals(200, repetida.status(), "O produtor reenviou após perda de sinal");
+        Thread.sleep(2000);
+        assertEquals("VENDIDA", statusDaReservaDeEstoque(pedido), "A confirmação repetida não gera efeito novo");
+        assertEquals(27, estoque(c, c.produto()), "O produto retirado não volta para o disponível");
+    }
+
+    @Test
     @Order(99)
     public void servicoParadoDerrubaSoAsPropriasRotas() throws Exception {
         pararServico("entrega");
@@ -208,6 +230,30 @@ public class FluxoPontaAPontaTest {
         for (JsonNode f : enviar("GET", "/api/faturamento?visao=vendedor&usuarioId=" + c.vendedor(), null).corpo())
             if (f.get("pedido_id").asLong() == pedido) return f;
         return null;
+    }
+
+    private static String statusDaReservaDeEstoque(long pedido) throws Exception {
+        JsonNode reservas = enviar("GET", "/api/produtos/reservas?pedidoIds=" + pedido, null).corpo();
+        return reservas.isEmpty() ? "" : reservas.get(0).get("status").asText();
+    }
+
+    private static String statusDaRetirada(long pedido) throws Exception {
+        JsonNode reservas = enviar("GET", "/api/retiradas/reservas?pedidoIds=" + pedido, null).corpo();
+        return reservas.isEmpty() ? "" : reservas.get(0).get("status").asText();
+    }
+
+    @FunctionalInterface
+    private interface Condicao {
+        boolean ok() throws Exception;
+    }
+
+    private static void aguardar(int segundos, Condicao condicao, String descricao) throws Exception {
+        long limite = System.nanoTime() + segundos * 1_000_000_000L;
+        while (System.nanoTime() < limite) {
+            if (condicao.ok()) return;
+            Thread.sleep(250);
+        }
+        throw new AssertionError("Esperava: " + descricao);
     }
 
     private static Resposta enviar(String metodo, String caminho, Object corpo) throws Exception {

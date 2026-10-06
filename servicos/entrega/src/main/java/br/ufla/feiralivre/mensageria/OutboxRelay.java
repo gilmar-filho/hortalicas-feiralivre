@@ -26,11 +26,14 @@ public class OutboxRelay {
 
     private final EntregaRepository repository;
     private final RabbitTemplate rabbit;
+    private final boolean ativo;
 
-    @Value("${mensageria.relay.ativo:true}")
-    private boolean ativo;
-
-    public OutboxRelay(EntregaRepository repository, RabbitTemplate rabbit) { this.repository = repository; this.rabbit = rabbit; }
+    public OutboxRelay(EntregaRepository repository, RabbitTemplate rabbit,
+            @Value("${mensageria.relay.ativo:true}") boolean ativo) {
+        this.repository = repository;
+        this.rabbit = rabbit;
+        this.ativo = ativo;
+    }
 
     @Scheduled(fixedDelayString = "${mensageria.relay.intervalo-ms:1000}")
     public void publicarPendentes() {
@@ -44,7 +47,6 @@ public class OutboxRelay {
             } catch (RuntimeException e) {
                 repository.registrarErroPublicacao(eventoId, truncar(e));
                 log.warn("Outbox: publicação do evento {} falhou e será repetida: {}", eventoId, e.getMessage());
-                return;
             }
         }
     }
