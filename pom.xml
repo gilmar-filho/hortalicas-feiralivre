@@ -19,8 +19,8 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!-- TROCAR pelos dois valores que o SonarCloud mostra ao importar o repo -->
-    <sonar.organization>COLOQUE-A-ORGANIZACAO-AQUI</sonar.organization>
-    <sonar.projectKey>COLOQUE-A-CHAVE-DO-PROJETO-AQUI</sonar.projectKey>
+    <sonar.organization>gilmar-filho</sonar.organization>
+    <sonar.projectKey>gilmar-filho_hortalicas-feiralivre</sonar.projectKey>
     <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     <!-- O e2e sobe o Compose inteiro; fora da analise de codigo. -->
     <sonar.exclusions>e2e/**,frontend/**</sonar.exclusions>
