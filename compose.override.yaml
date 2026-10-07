@@ -2,3 +2,6 @@ services:
   gateway:
     ports:
       - "8080:80"
+  rabbitmq:
+    ports:
+      - "15672:15672"
