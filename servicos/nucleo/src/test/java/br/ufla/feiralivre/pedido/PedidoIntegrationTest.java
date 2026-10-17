@@ -1,9 +1,9 @@
 package br.ufla.feiralivre.pedido;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
-import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -241,9 +241,8 @@ public class PedidoIntegrationTest extends ServicosSimulados {
         servicosAceitamPedido(produto, vendedor, "Couve (falha da saga)", 4.00);
         db.execute("ALTER TABLE item_pedido RENAME TO item_pedido_indisponivel");
         try {
-            RuntimeException falha = org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
-                () -> postPedido(produto, 1, 77L, data, comprador));
-            assertTrue(falha.getMessage() != null || falha.getCause() != null);
+            ResponseEntity<Map> resposta = postPedido(produto, 1, 77L, data, comprador);
+            assertTrue(resposta.getStatusCode().is5xxServerError());
         } finally {
             db.execute("ALTER TABLE item_pedido_indisponivel RENAME TO item_pedido");
         }
