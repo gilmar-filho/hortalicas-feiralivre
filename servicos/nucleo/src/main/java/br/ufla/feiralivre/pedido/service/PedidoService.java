@@ -41,14 +41,24 @@ public class PedidoService {
         // Id reservado e confirmado antes de sair para a rede: com rollback o
         // SQLite reusaria o id, e uma reserva órfã passaria ao próximo pedido.
         long pedidoId = transacao.execute(tx -> repository.proximoId());
-        producao.reservarEstoque(pedidoId, request.produtoId(), request.quantidade(), request.dataRetirada());
-        entrega.reservarAtendimento(pedidoId, compradorId, produto.vendedorId(), request.horarioRetiradaId(), request.dataRetirada());
-        double total = produto.preco() * request.quantidade();
-        transacao.executeWithoutResult(tx -> {
-            repository.criar(pedidoId, compradorId, total);
-            repository.criarItem(pedidoId, request.produtoId(), produto.nome(), produto.vendedorId(), request.quantidade(), produto.preco(), total);
-            faturamento.criarFatura(pedidoId, total);
-        });
+        boolean estoqueReservado = false;
+        boolean atendimentoReservado = false;
+        try {
+            producao.reservarEstoque(pedidoId, request.produtoId(), request.quantidade(), request.dataRetirada());
+            estoqueReservado = true;
+            entrega.reservarAtendimento(pedidoId, compradorId, produto.vendedorId(), request.horarioRetiradaId(), request.dataRetirada());
+            atendimentoReservado = true;
+            double total = produto.preco() * request.quantidade();
+            transacao.executeWithoutResult(tx -> {
+                repository.criar(pedidoId, compradorId, total);
+                repository.criarItem(pedidoId, request.produtoId(), produto.nome(), produto.vendedorId(), request.quantidade(), produto.preco(), total);
+                faturamento.criarFatura(pedidoId, total);
+            });
+        } catch (RuntimeException falha) {
+            if (atendimentoReservado) compensar("atendimento", () -> entrega.liberarAtendimento(pedidoId), falha);
+            if (estoqueReservado) compensar("estoque", () -> producao.devolverEstoque(pedidoId), falha);
+            throw falha;
+        }
         return repository.buscar(pedidoId);
     }
 
@@ -74,5 +84,12 @@ public class PedidoService {
 
     private static boolean dataValida(String data) {
         try { LocalDate.parse(data); return true; } catch (RuntimeException e) { return false; }
+    }
+
+    private static void compensar(String etapa, Runnable acao, RuntimeException falha) {
+        try { acao.run(); }
+        catch (RuntimeException compensacao) {
+            falha.addSuppressed(new IllegalStateException("Falha ao compensar " + etapa, compensacao));
+        }
     }
 }

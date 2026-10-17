@@ -114,8 +114,8 @@ public abstract class ServicosSimulados {
     }
 
     protected void devolucoesAceitas() {
-        PRODUCAO.stubFor(delete(urlPathMatching("/interno/reservas-estoque/\\d+")).willReturn(noContent()));
-        ENTREGA.stubFor(delete(urlPathMatching("/interno/atendimentos/\\d+")).willReturn(noContent()));
+        PRODUCAO.stubFor(delete(urlPathMatching("/interno/reservas-estoque/[0-9]+")).willReturn(noContent()));
+        ENTREGA.stubFor(delete(urlPathMatching("/interno/atendimentos/[0-9]+")).willReturn(noContent()));
     }
 
     protected void producaoForaDoArNaDevolucao() {

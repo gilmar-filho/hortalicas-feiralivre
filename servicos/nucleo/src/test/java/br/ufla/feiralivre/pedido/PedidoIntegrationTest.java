@@ -1,11 +1,13 @@
 package br.ufla.feiralivre.pedido;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -154,6 +156,7 @@ public class PedidoIntegrationTest extends ServicosSimulados {
         janelaDisponivel();
         estoqueReservado();
         atendimentoRecusado(409, "Janela de retirada cheia");
+        devolucoesAceitas();
 
         ResponseEntity<Map> recusado = postPedido(produto, 1, 77L, data, comprador);
         long idPerdido = idEnviadoAProducao();
@@ -165,6 +168,26 @@ public class PedidoIntegrationTest extends ServicosSimulados {
         assertEquals(HttpStatus.OK, seguinte.getStatusCode());
         assertNotEquals(idPerdido, ((Number) seguinte.getBody().get("id")).longValue(),
             "Um id que já foi a Produção nunca pode ser reusado: a reserva órfã passaria para o próximo pedido");
+    }
+
+    @Test
+    public void falhaNaReservaDeAtendimentoCompensaEstoque() {
+        long vendedor = pessoa("vendedor.saga.atendimento");
+        long comprador = pessoa("comprador.saga.atendimento");
+        long produto = TestData.id();
+        String data = TestData.hoje().plusDays(2).toString();
+        produtoExiste(produto, vendedor, "Couve (recusa na entrega)", 4.00);
+        janelaDisponivel();
+        estoqueReservado();
+        atendimentoRecusado(409, "Janela de retirada cheia");
+        devolucoesAceitas();
+
+        ResponseEntity<Map> resposta = postPedido(produto, 1, 77L, data, comprador);
+
+        assertEquals(HttpStatus.CONFLICT, resposta.getStatusCode());
+        PRODUCAO.verify(1, deleteRequestedFor(urlPathMatching("/interno/reservas-estoque/\\d+")));
+        ENTREGA.verify(0, deleteRequestedFor(urlPathMatching("/interno/atendimentos/\\d+")));
+        assertEquals(0, pedidosDo(comprador));
     }
 
     @Test
@@ -208,6 +231,26 @@ public class PedidoIntegrationTest extends ServicosSimulados {
         assertTrue(resposta.getStatusCode().isError());
         PRODUCAO.verify(0, postRequestedFor(urlEqualTo("/interno/reservas-estoque")));
         assertEquals(0, pedidosDo(comprador));
+    }
+
+    @Test
+    public void falhaNaGravacaoLocalCompensaEstoqueEAtendimento() {
+        long vendedor = pessoa("vendedor.saga");
+        long comprador = pessoa("comprador.saga");
+        long produto = TestData.id();
+        String data = TestData.hoje().plusDays(2).toString();
+        servicosAceitamPedido(produto, vendedor, "Couve (falha da saga)", 4.00);
+        db.execute("ALTER TABLE item_pedido RENAME TO item_pedido_indisponivel");
+        try {
+            ResponseEntity<Map> resposta = postPedido(produto, 1, 77L, data, comprador);
+            assertTrue(resposta.getStatusCode().is5xxServerError());
+        } finally {
+            db.execute("ALTER TABLE item_pedido_indisponivel RENAME TO item_pedido");
+        }
+
+        PRODUCAO.verify(1, deleteRequestedFor(urlPathMatching("/interno/reservas-estoque/\\d+")));
+        ENTREGA.verify(1, deleteRequestedFor(urlPathMatching("/interno/atendimentos/\\d+")));
+        assertEquals(0, pedidosDo(comprador), "A falha local não pode deixar pedido pela metade");
     }
 
     @Test
