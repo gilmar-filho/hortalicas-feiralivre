@@ -1,16 +1,5 @@
 package br.ufla.feiralivre;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.delete;
-import static com.github.tomakehurst.wiremock.client.WireMock.get;
-import static com.github.tomakehurst.wiremock.client.WireMock.noContent;
-import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
-import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
-import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
@@ -18,27 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-
-import com.atlassian.oai.validator.OpenApiInteractionValidator;
-import com.atlassian.oai.validator.model.SimpleRequest;
-import com.atlassian.oai.validator.model.SimpleResponse;
-import com.atlassian.oai.validator.report.SimpleValidationReportFormat;
-import com.atlassian.oai.validator.report.ValidationReport;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
-import com.github.tomakehurst.wiremock.http.Fault;
-import com.github.tomakehurst.wiremock.http.LoggedResponse;
-import com.github.tomakehurst.wiremock.stubbing.ServeEvent;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 
 /**
  * Produção e Entrega simuladas pelo WireMock. Depois de cada teste, toda
@@ -114,8 +82,8 @@ public abstract class ServicosSimulados {
     }
 
     protected void devolucoesAceitas() {
-        PRODUCAO.stubFor(delete(urlPathMatching("/interno/reservas-estoque/\\d+")).willReturn(noContent()));
-        ENTREGA.stubFor(delete(urlPathMatching("/interno/atendimentos/\\d+")).willReturn(noContent()));
+        PRODUCAO.stubFor(delete(urlPathMatching("/interno/reservas-estoque/[0-9]+")).willReturn(noContent()));
+        ENTREGA.stubFor(delete(urlPathMatching("/interno/atendimentos/[0-9]+")).willReturn(noContent()));
     }
 
     protected void producaoForaDoArNaDevolucao() {
