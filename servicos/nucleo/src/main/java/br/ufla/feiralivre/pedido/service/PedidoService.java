@@ -4,6 +4,11 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
+
 import br.ufla.feiralivre.faturamento.service.FaturamentoService;
 import br.ufla.feiralivre.pedido.cliente.EntregaCliente;
 import br.ufla.feiralivre.pedido.cliente.ProducaoCliente;
